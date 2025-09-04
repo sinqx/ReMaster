@@ -1,0 +1,24 @@
+# config.yaml
+app:
+  name: "Auth Service"
+
+http:
+  port: "8080" # api-gateway
+
+grpc:
+  port: "50051" # auth-service
+
+mongo:
+  uri: "mongodb://localhost:27017"
+  user: "root"
+  password: "password"
+  database: "masters_platform"
+
+redis:
+  address: "localhost:6379"
+  password: ""
+
+jwt:
+  secret_key: "секретик"
+  access_token_ttl: 15m
+  refresh_token_ttl: 720h
