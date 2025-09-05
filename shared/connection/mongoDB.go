@@ -1,4 +1,4 @@
-package db
+package connection
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
-	"remaster/shared/config"
+	"remaster/shared"
 )
 
 // mongo collections (for now)
