@@ -1,0 +1,261 @@
+syntax = "proto3";
+
+package common;
+
+option go_package = "masters-platform/pkg/pb/common";
+
+import "google/protobuf/timestamp.proto";
+
+// === BASiCS ===
+
+enum ResponseStatus {
+  RESPONSE_STATUS_UNSPECIFIED = 0;
+  RESPONSE_STATUS_SUCCESS = 1;
+  RESPONSE_STATUS_ERROR = 2;
+  RESPONSE_STATUS_VALIDATION_ERROR = 3;
+  RESPONSE_STATUS_PERMISSION_DENIED = 4;
+  RESPONSE_STATUS_NOT_FOUND = 5;
+  RESPONSE_STATUS_ALREADY_EXISTS = 6;
+}
+
+message BaseResponse {
+  ResponseStatus status = 1;
+  string message = 2;
+  repeated ErrorDetail errors = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message ErrorDetail {
+  string field = 1;
+  string code = 2;
+  string message = 3;
+}
+
+
+// === PAGINATION ===
+
+message PaginationRequest {
+  int32 page = 1;           // Номер страницы (начиная с 1)
+  int32 per_page = 2;       // Количество элементов на странице
+  string sort_by = 3;       // Поле для сортировки
+  SortOrder sort_order = 4; // Направление сортировки
+}
+
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0;
+  SORT_ORDER_ASC = 1;
+  SORT_ORDER_DESC = 2;
+}
+
+message PaginationResponse {
+  int32 current_page = 1;
+  int32 per_page = 2;
+  int32 total_pages = 3;
+  int64 total_items = 4;
+  bool has_next = 5;
+  bool has_prev = 6;
+}
+
+
+// === FILTERS ===
+
+message BaseFilters {
+  google.protobuf.Timestamp created_from = 1;
+  google.protobuf.Timestamp created_to = 2;
+  google.protobuf.Timestamp updated_from = 3;
+  google.protobuf.Timestamp updated_to = 4;
+  repeated string status = 5;
+}
+
+message DateRangeFilter {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+}
+
+message NumericRangeFilter {
+  optional double min = 1;
+  optional double max = 2;
+}
+
+
+// === GEO ===
+
+message Coordinates {
+  double latitude = 1;
+  double longitude = 2;
+}
+
+message Address {
+  string city = 1;
+  string street = 2;
+  string house_number = 3;
+  string apartment = 4;
+  optional Coordinates coordinates = 5;
+}
+
+
+// === MEDIA ===
+
+message FileInfo {
+  string id = 1;
+  string filename = 2;
+  string original_name = 3;
+  string mime_type = 4;
+  int64 size = 5;
+  string url = 6;
+  string thumbnail_url = 7;
+  google.protobuf.Timestamp uploaded_at = 8;
+}
+
+enum MediaType {
+  MEDIA_TYPE_UNSPECIFIED = 0;
+  MEDIA_TYPE_IMAGE = 1;
+  MEDIA_TYPE_VIDEO = 2;
+  MEDIA_TYPE_DOCUMENT = 3;
+  MEDIA_TYPE_AUDIO = 4;
+}
+
+
+// === CONTACTS ===
+
+message ContactInfo {
+  string phone = 1;
+  string email = 2;
+  string telegram = 3;
+  string whatsapp = 4;
+  string website = 5;
+}
+
+
+// === RATING/REVIEWS ===
+
+message Rating {
+  double average = 1;      
+  int32 count = 2;         
+  RatingBreakdown breakdown = 3; 
+}
+
+message RatingBreakdown {
+  int32 stars_5 = 1;
+  int32 stars_4 = 2;
+  int32 stars_3 = 3;
+  int32 stars_2 = 4;
+  int32 stars_1 = 5;
+}
+
+
+// === STATISTICS ===
+
+message Statistics {
+  int64 total_orders = 1;
+  int64 completed_orders = 2;
+  int64 cancelled_orders = 3;
+  double completion_rate = 4;
+  double average_response_time = 5; // IN HOURS
+}
+
+
+// === MONEY & PRICING ===
+
+message Money {
+  int64 amount = 1;      
+  string currency = 2;   
+}
+
+message PriceRange {
+  optional Money min_price = 1;
+  optional Money max_price = 2;
+  string type = 3;       // "fixed", "range", "negotiable"
+}
+
+
+// === TIME ===
+
+message WorkingHours {
+  repeated DaySchedule schedule = 1;
+}
+
+message DaySchedule {
+  DayOfWeek day = 1;
+  repeated TimeSlot time_slots = 2;
+  bool is_day_off = 3;
+}
+
+message TimeSlot {
+  string start_time = 1; // HH:MM
+  string end_time = 2;   // HH:MM
+}
+
+enum DayOfWeek {
+  DAY_OF_WEEK_UNSPECIFIED = 0;
+  DAY_OF_WEEK_MONDAY = 1;
+  DAY_OF_WEEK_TUESDAY = 2;
+  DAY_OF_WEEK_WEDNESDAY = 3;
+  DAY_OF_WEEK_THURSDAY = 4;
+  DAY_OF_WEEK_FRIDAY = 5;
+  DAY_OF_WEEK_SATURDAY = 6;
+  DAY_OF_WEEK_SUNDAY = 7;
+}
+
+
+// === NOTIFICATION ===
+
+enum NotificationType {
+  NOTIFICATION_TYPE_UNSPECIFIED = 0;
+  NOTIFICATION_TYPE_INFO = 1;
+  NOTIFICATION_TYPE_SUCCESS = 2;
+  NOTIFICATION_TYPE_WARNING = 3;
+  NOTIFICATION_TYPE_ERROR = 4;
+}
+
+enum NotificationChannel {
+  NOTIFICATION_CHANNEL_UNSPECIFIED = 0;
+  NOTIFICATION_CHANNEL_EMAIL = 1;
+  NOTIFICATION_CHANNEL_SMS = 2;
+  NOTIFICATION_CHANNEL_PUSH = 3;
+  NOTIFICATION_CHANNEL_IN_APP = 4;
+}
+
+// === SEARCH ===
+
+message SearchRequest {
+  string query = 1;
+  repeated SearchFilter filters = 2;
+  PaginationRequest pagination = 3;
+}
+
+message SearchFilter {
+  string field = 1;
+  SearchOperator operator = 2;
+  repeated string values = 3;
+}
+
+enum SearchOperator {
+  SEARCH_OPERATOR_UNSPECIFIED = 0;
+  SEARCH_OPERATOR_EQUALS = 1;
+  SEARCH_OPERATOR_NOT_EQUALS = 2;
+  SEARCH_OPERATOR_CONTAINS = 3;
+  SEARCH_OPERATOR_NOT_CONTAINS = 4;
+  SEARCH_OPERATOR_STARTS_WITH = 5;
+  SEARCH_OPERATOR_ENDS_WITH = 6;
+  SEARCH_OPERATOR_GREATER_THAN = 7;
+  SEARCH_OPERATOR_LESS_THAN = 8;
+  SEARCH_OPERATOR_GREATER_THAN_OR_EQUAL = 9;
+  SEARCH_OPERATOR_LESS_THAN_OR_EQUAL = 10;
+  SEARCH_OPERATOR_IN = 11;
+  SEARCH_OPERATOR_NOT_IN = 12;
+}
+
+// === AUDIT LOG ===
+
+message AuditLogEntry {
+  string id = 1;
+  string user_id = 2;
+  string action = 3;
+  string resource_type = 4;
+  string resource_id = 5;
+  map<string, string> metadata = 6;
+  google.protobuf.Timestamp timestamp = 7;
+  string ip_address = 8;
+  string user_agent = 9;
+}
