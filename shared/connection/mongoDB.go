@@ -11,7 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
-	"remaster/shared"
+	cfg "remaster/shared"
 )
 
 // mongo collections (for now)
@@ -28,7 +28,7 @@ const (
 type MongoManager struct {
 	client   *mongo.Client
 	database *mongo.Database
-	config   *config.MongoConfig
+	config   *cfg.MongoConfig
 	mu       sync.RWMutex
 }
 
@@ -38,7 +38,7 @@ var (
 )
 
 // Singleton
-func NewMongoManager(cfg *config.MongoConfig) *MongoManager {
+func NewMongoManager(cfg *cfg.MongoConfig) *MongoManager {
 	mongoOnce.Do(func() {
 		mongoInstance = &MongoManager{
 			config: cfg,
