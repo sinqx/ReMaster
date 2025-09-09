@@ -12,6 +12,9 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
+	"remaster/services/auth/handlers"
+	"remaster/services/auth/repositories"
+	"remaster/services/auth/services"
 	cfg "remaster/shared"
 	"remaster/shared/connection"
 )
@@ -22,18 +25,21 @@ type Server struct {
 	MongoManager *connection.MongoManager
 	RedisManager *connection.RedisManager
 
-	httpServer *http.Server
-	grpcServer *grpc.Server
-	// authService *services.AuthService
+	httpServer  *http.Server
+	grpcServer  *grpc.Server
+	authHandler *handlers.AuthHandler
 }
 
 func NewServer(config *cfg.Config, logger *slog.Logger, mongoMgr *connection.MongoManager, redisMgr *connection.RedisManager) *Server {
+	authRepo := repositories.NewAuthRepository(mongoMgr.GetDatabase(), logger)
+	authService := services.NewAuthService(*authRepo, redisMgr, &config.OAuth, &config.JWT)
+	authHandler := handlers.NewAuthHandler(authService, logger)
 	return &Server{
 		Config:       config,
 		Logger:       logger,
 		MongoManager: mongoMgr,
 		RedisManager: redisMgr,
-		// authService: services.NewAuthService(...)
+		authHandler:  authHandler,
 	}
 }
 
@@ -72,13 +78,13 @@ func (s *Server) shutdown() {
 
 	if s.MongoManager != nil {
 		if err := s.MongoManager.Disconnect(ctx); err != nil {
-			s.Logger.Info("Error closing MongoDB: %v", err)
+			s.Logger.Error("Error closing MongoDB", "error", err)
 		}
 	}
 
 	if s.RedisManager != nil {
 		if err := s.RedisManager.Disconnect(); err != nil {
-			s.Logger.Info("Error closing Redis: %v", err)
+			s.Logger.Error("Error closing Redis", "error", err)
 		}
 	}
 }
