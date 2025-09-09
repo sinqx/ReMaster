@@ -1,8 +1,7 @@
 syntax = "proto3";
 
 package common;
-
-option go_package = "masters-platform/pkg/pb/common";
+option go_package = "remaster/shared/proto/common";
 
 import "google/protobuf/timestamp.proto";
 
