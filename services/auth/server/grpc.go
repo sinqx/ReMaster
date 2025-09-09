@@ -14,7 +14,8 @@ import (
 func (s *Server) startGRPCServer(ctx context.Context) error {
 	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%s", s.Config.GRPC.Host, s.Config.GRPC.Port))
 	if err != nil {
-		return fmt.Errorf("failed to listen on gRPC port: %w", err)
+		s.Logger.Error("failed to listen on gRPC port", "error", err)
+		return err
 	}
 
 	opts := []grpc.ServerOption{
@@ -48,7 +49,8 @@ func (s *Server) startGRPCServer(ctx context.Context) error {
 	}()
 
 	if err := s.grpcServer.Serve(lis); err != nil {
-		return fmt.Errorf("failed to serve gRPC: %w", err)
+		s.Logger.Error("failed to serve gRPC", "error", err)
+		return err
 	}
 
 	return nil
