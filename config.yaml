@@ -51,11 +51,11 @@ oauth:
   google_redirect_url: http://localhost:8080/auth/google/callback
 
 aws:
+  endpoint: http://minio:9000
   region: us-east-1
-  access_key_id: aws-access-key
-  secret_access_key: secret
+  access_key_id: minioadmin
+  secret_access_key: minioadmin
   s3_bucket: remaster-media
-  s3_region: us-east-1
 
 kafka:
   brokers:
