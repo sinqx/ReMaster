@@ -2,12 +2,12 @@ package server
 
 import (
 	"context"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -34,6 +34,7 @@ func NewServer(config *cfg.Config, logger *slog.Logger, mongoMgr *connection.Mon
 	authRepo := repositories.NewAuthRepository(mongoMgr.GetDatabase(), logger)
 	authService := services.NewAuthService(*authRepo, redisMgr, &config.OAuth, &config.JWT)
 	authHandler := handlers.NewAuthHandler(authService, logger)
+	logger = logger.With(slog.String("service", "auth"))
 	return &Server{
 		Config:       config,
 		Logger:       logger,
@@ -44,15 +45,18 @@ func NewServer(config *cfg.Config, logger *slog.Logger, mongoMgr *connection.Mon
 }
 
 func (s *Server) Start() error {
+	ctx, cancel := context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(context.Background())
 
 	// gRPC
 	g.Go(func() error {
+		s.Logger.Info("gRPC server starting", "host", s.Config.GRPC.Host, "port", s.Config.GRPC.Port)
 		return s.startGRPCServer(ctx)
 	})
 
 	//  HTTP
 	g.Go(func() error {
+		s.Logger.Info("HTTP server starting", "host", s.Config.HTTP.Host, "port", s.Config.HTTP.Port)
 		return s.startHTTPServer(ctx)
 	})
 
@@ -62,29 +66,48 @@ func (s *Server) Start() error {
 	select {
 	case <-stop:
 		s.Logger.Info("shutting down server due to OS signal")
+		cancel()
 	case <-ctx.Done():
 		s.Logger.Info("shutting down server due to context cancellation")
 	}
 
 	s.shutdown()
-	return g.Wait()
+	done := make(chan struct{})
+	go func() {
+		g.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.Logger.Info("server shutdown completed")
+	case <-time.After(s.Config.HTTP.ShutdownTimeout):
+		s.Logger.Warn("server shutdown timed out, forcing exit")
+	}
+
+	cancel()
+	return nil
 }
 
 func (s *Server) shutdown() {
-	log.Println("Cleaning up resources...")
+	s.Logger.Info("Cleaning up resources...")
 
-	ctx, close := context.WithTimeout(context.Background(), s.Config.Mongo.ConnectTimeout)
-	defer close()
+	ctx, cancel := context.WithTimeout(context.Background(), s.Config.HTTP.ShutdownTimeout)
+	defer cancel()
 
 	if s.MongoManager != nil {
 		if err := s.MongoManager.Disconnect(ctx); err != nil {
 			s.Logger.Error("Error closing MongoDB", "error", err)
+		} else {
+			s.Logger.Info("MongoDB connection closed")
 		}
 	}
 
 	if s.RedisManager != nil {
 		if err := s.RedisManager.Disconnect(); err != nil {
 			s.Logger.Error("Error closing Redis", "error", err)
+		} else {
+			s.Logger.Info("Redis connection closed")
 		}
 	}
 }
