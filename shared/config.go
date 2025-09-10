@@ -150,7 +150,7 @@ func LoadConfig(configPath ...string) (*Config, error) {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
-	log.Println("✅ Configuration loaded and validated successfully")
+	log.Println("Configuration loaded and validated successfully")
 	return &cfg, nil
 }
 
@@ -169,7 +169,7 @@ func setDefaults() {
 	viper.SetDefault("http.shutdown_timeout", "5s")
 
 	// gRPC defaults
-	viper.SetDefault("grpc.port", "50051")
+	viper.SetDefault("grpc.port", "9090")
 	viper.SetDefault("grpc.host", "0.0.0.0")
 	viper.SetDefault("grpc.max_receive_size", 4*1024*1024) // 4MB
 	viper.SetDefault("grpc.max_send_size", 4*1024*1024)    // 4MB

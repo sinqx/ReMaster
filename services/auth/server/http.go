@@ -70,8 +70,6 @@ func (s *Server) startHTTPServer(ctx context.Context) error {
 		WriteTimeout: s.Config.HTTP.WriteTimeout,
 	}
 
-	s.Logger.Info("HTTP server starting on %s:%s", s.Config.HTTP.Host, s.Config.HTTP.Port)
-
 	// Graceful shutdown
 	go func() {
 		<-ctx.Done()
@@ -81,7 +79,7 @@ func (s *Server) startHTTPServer(ctx context.Context) error {
 		defer cancel()
 
 		if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
-			s.Logger.Info("HTTP server shutdown error: %v", err)
+			s.Logger.Error("HTTP server shutdown error", "error", err)
 		}
 	}()
 

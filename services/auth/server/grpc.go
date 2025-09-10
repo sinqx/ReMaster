@@ -39,8 +39,6 @@ func (s *Server) startGRPCServer(ctx context.Context) error {
 		reflection.Register(s.grpcServer)
 	}
 
-	s.Logger.Info("gRPC server starting on %s:%s", s.Config.GRPC.Host, s.Config.GRPC.Port)
-
 	// start goroutine for graceful shutdown
 	go func() {
 		<-ctx.Done()
