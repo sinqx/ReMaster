@@ -13,8 +13,10 @@ import (
 	"google.golang.org/grpc"
 
 	"remaster/services/auth/handlers"
+	oauth "remaster/services/auth/oAuth"
 	"remaster/services/auth/repositories"
 	"remaster/services/auth/services"
+	"remaster/services/auth/utils"
 	cfg "remaster/shared"
 	"remaster/shared/connection"
 )
@@ -31,8 +33,10 @@ type Server struct {
 }
 
 func NewServer(config *cfg.Config, logger *slog.Logger, mongoMgr *connection.MongoManager, redisMgr *connection.RedisManager) *Server {
+	jwtUtils := utils.NewJWTUtils(&config.JWT)
+	googleAuthClient := oauth.NewGoogleAuthClient(&config.OAuth)
 	authRepo := repositories.NewAuthRepository(mongoMgr.GetDatabase(), logger)
-	authService := services.NewAuthService(*authRepo, redisMgr, &config.OAuth, &config.JWT)
+	authService := services.NewAuthService(*authRepo, redisMgr, googleAuthClient, jwtUtils)
 	authHandler := handlers.NewAuthHandler(authService, logger)
 	logger = logger.With(slog.String("service", "auth"))
 	return &Server{
