@@ -8,7 +8,7 @@ import (
 	"remaster/services/auth/server"
 	config "remaster/shared"
 	"remaster/shared/connection"
-	logger "remaster/shared/utils"
+	logger "remaster/shared/logger"
 )
 
 func main() {
