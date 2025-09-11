@@ -1,6 +1,9 @@
 package models
 
 import (
+	"errors"
+	"net/mail"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -62,13 +65,19 @@ type LoginAttempt struct {
 	Reason    string             `bson:"reason,omitempty" json:"reason,omitempty"`
 }
 
-type CreateUserRequest struct {
+type RegisterRequest struct {
 	Email     string   `json:"email" validate:"required,email"`
 	Password  string   `json:"password" validate:"required,min=8"`
 	FirstName string   `json:"first_name" validate:"required,min=2,max=50"`
 	LastName  string   `json:"last_name" validate:"required,min=2,max=50"`
 	Phone     string   `json:"phone" validate:"required"`
 	UserType  UserType `json:"user_type" validate:"required,oneof=client master"`
+}
+
+type RegisterResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	AuthResponse
 }
 
 type LoginRequest struct {
@@ -103,6 +112,12 @@ type UserResponse struct {
 	LastLoginAt  *time.Time `json:"last_login_at,omitempty"`
 }
 
+type RequestMetadata struct {
+	UserAgent string
+	IPAddress string
+	DeviceID  string
+}
+
 // User information -> UserResponse
 func (u *User) ToResponse() *UserResponse {
 	return &UserResponse{
@@ -120,15 +135,6 @@ func (u *User) ToResponse() *UserResponse {
 	}
 }
 
-func IsValidUserType(userType string) bool {
-	switch UserType(userType) {
-	case UserTypeClient, UserTypeMaster, UserTypeAdmin:
-		return true
-	default:
-		return false
-	}
-}
-
 func (u *User) BeforeCreate() {
 	now := time.Now()
 	u.CreatedAt = now
@@ -141,4 +147,26 @@ func (u *User) BeforeCreate() {
 	if u.ID.IsZero() {
 		u.ID = primitive.NewObjectID()
 	}
+}
+
+func (req *RegisterRequest) ValidateRegisterRequest() error {
+	var errs []string
+
+	if _, err := mail.ParseAddress(req.Email); err != nil {
+		errs = append(errs, "invalid email format")
+	}
+	if len(req.Password) < 8 {
+		errs = append(errs, "password must be at least 8 characters long")
+	}
+	if strings.TrimSpace(req.FirstName) == "" {
+		errs = append(errs, "first name is required")
+	}
+	if strings.TrimSpace(req.LastName) == "" {
+		errs = append(errs, "last name is required")
+	}
+	if req.UserType != UserTypeMaster && req.UserType != UserTypeClient {
+		errs = append(errs, "invalid user type")
+	}
+
+	return errors.New(strings.Join(errs, ", "))
 }

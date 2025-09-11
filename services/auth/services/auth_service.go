@@ -2,11 +2,7 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
-	"net/mail"
-	"strings"
 	"time"
 
 	"remaster/services/auth/models"
@@ -16,6 +12,7 @@ import (
 	config "remaster/shared"
 	conn "remaster/shared/connection"
 
+	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -26,7 +23,7 @@ const (
 )
 
 type AuthService struct {
-	userRepo    repositories.AuthRepository
+	repo        repositories.AuthRepository
 	redisMgr    *conn.RedisManager
 	googleAuth  *oauth.GoogleAuthClient
 	oauthConfig *config.OAuthConfig
@@ -41,7 +38,7 @@ func NewAuthService(
 	jwtUtils *utils.JWTUtils,
 ) *AuthService {
 	return &AuthService{
-		userRepo:   userRepo,
+		repo:       userRepo,
 		redisMgr:   redisMgr,
 		googleAuth: googleAuth,
 		jwtUtils:   jwtUtils,
@@ -49,19 +46,22 @@ func NewAuthService(
 }
 
 type AuthServiceInterface interface {
-	Register(ctx context.Context, req *models.CreateUserRequest) (string, error)
+	Register(ctx context.Context, req *models.RegisterRequest) (string, error)
 }
 
-func (s *AuthService) Register(ctx context.Context, req *models.CreateUserRequest) (*models.AuthResponse, error) {
-	// logger.Info("Registering user: %s", req.Email)
+func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest, metadata *models.RequestMetadata) (*models.AuthResponse, error) {
+	// s.logger.Info("Registering user", "email", req.Email)
 
-	if err := s.validateCreateUserRequest(req); err != nil {
+	if err := req.ValidateRegisterRequest(); err != nil {
 		return nil, err // NewValidationError(err.Error())
 	}
 
-	existingUser, err := s.userRepo.GetByEmail(ctx, req.Email)
-	if err == nil && existingUser != nil {
-		return nil, err // NewConflictError("user already exists")
+	existingUser, err := s.repo.GetByEmail(ctx, req.Email)
+	if err != nil && err != mongo.ErrNoDocuments {
+		return nil, err // fmt.Errorf("error checking user existence: %w", err)
+	}
+	if existingUser != nil {
+		return nil, err //NewConflictError("user with this email already exists")
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), BcryptCost)
@@ -78,36 +78,37 @@ func (s *AuthService) Register(ctx context.Context, req *models.CreateUserReques
 		UserType:  req.UserType,
 	}
 
-	if err := s.userRepo.Create(ctx, user); err != nil {
-		// if s.userRepo.IsUniqueConstraintError(err) {
-		// 	return nil, err // NewConflictError("user already exists")
-		// }
+	if err := s.repo.Create(ctx, user); err != nil {
+		// if s.repo.IsUniqueConstraintError(err)
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	accessToken, err := s.jwtUtils.GenerateAccessToken(user.ID.Hex(), user.Email, string(user.UserType))
 	if err != nil {
-		return nil, err //fmt.Errorf("failed to generate access token: %w", err)
+		return nil, err
 	}
-
 	refreshToken, err := s.jwtUtils.GenerateRefreshToken()
 	if err != nil {
-		return nil, err // fmt.Errorf("failed to generate refresh token: %w", err)
+		return nil, err
 	}
 
 	tokenModel := &models.RefreshToken{
 		UserID:    user.ID,
 		Token:     refreshToken,
 		ExpiresAt: time.Now().Add(s.jwtConfig.RefreshTokenTTL),
+		CreatedAt: time.Now(),
+		IsRevoked: false, // Новый токен не может быть отозван
+		DeviceID:  metadata.DeviceID,
+		UserAgent: metadata.UserAgent,
+		IP:        metadata.IPAddress,
 	}
 
-	if err := s.userRepo.SaveRefreshToken(ctx, tokenModel); err != nil {
-		return nil, err // fmt.Errorf("failed to save refresh token: %w", err)
+	if err := s.repo.SaveRefreshToken(ctx, tokenModel); err != nil {
+		return nil, fmt.Errorf("failed to save refresh token: %w", err)
 	}
 
-	// s.recordLoginAttempt(ctx, req.Email, "", true, "registration")
-
-	log.Printf("User registered successfully: %s", user.ID.Hex())
+	// s.recordLoginAttempt(ctx, req.Email, metadata.IPAddress, true, "registration")
+	// s.logger.Info("User registered successfully", "userID", user.ID.Hex())
 
 	return &models.AuthResponse{
 		User:         user.ToResponse(),
@@ -116,29 +117,4 @@ func (s *AuthService) Register(ctx context.Context, req *models.CreateUserReques
 		ExpiresAt:    time.Now().Add(s.jwtConfig.AccessTokenTTL).Unix(),
 		TokenType:    "Bearer",
 	}, nil
-}
-
-func (s *AuthService) validateCreateUserRequest(req *models.CreateUserRequest) error {
-	var errs []string
-
-	if _, err := mail.ParseAddress(req.Email); err != nil {
-		errs = append(errs, "invalid email format")
-	}
-	if len(req.Password) < 8 {
-		errs = append(errs, "password must be at least 8 characters long")
-	}
-	if strings.TrimSpace(req.FirstName) == "" {
-		errs = append(errs, "first name is required")
-	}
-	if strings.TrimSpace(req.LastName) == "" {
-		errs = append(errs, "last name is required")
-	}
-	if req.UserType != models.UserTypeMaster && req.UserType != models.UserTypeClient {
-		errs = append(errs, "invalid user type")
-	}
-	if len(errs) > 0 {
-		return errors.New(strings.Join(errs, ", "))
-	}
-
-	return nil
 }
