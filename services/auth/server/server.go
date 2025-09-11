@@ -19,17 +19,21 @@ import (
 	"remaster/services/auth/utils"
 	cfg "remaster/shared"
 	"remaster/shared/connection"
+	"remaster/shared/errors"
 )
 
 type Server struct {
-	Config       *cfg.Config
-	Logger       *slog.Logger
+	authHandler *handlers.AuthHandler
+	Config *cfg.Config
+
 	MongoManager *connection.MongoManager
 	RedisManager *connection.RedisManager
 
-	httpServer  *http.Server
-	grpcServer  *grpc.Server
-	authHandler *handlers.AuthHandler
+	httpServer *http.Server
+	grpcServer *grpc.Server
+
+	v      *errors.Validator
+	Logger *slog.Logger
 }
 
 func NewServer(config *cfg.Config, logger *slog.Logger, mongoMgr *connection.MongoManager, redisMgr *connection.RedisManager) *Server {
@@ -64,6 +68,7 @@ func (s *Server) Start() error {
 		return s.startHTTPServer(ctx)
 	})
 
+	// graceful shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 

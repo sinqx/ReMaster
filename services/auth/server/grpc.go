@@ -25,9 +25,6 @@ func (s *Server) startGRPCServer(ctx context.Context) error {
 
 	s.grpcServer = grpc.NewServer(opts...)
 
-	// authController := controllers.NewAuthController(s.authService)
-	// auth.RegisterAuthServiceServer(s.grpcServer, authController)
-
 	if s.Config.GRPC.EnableHealthCheck {
 		healthServer := health.NewServer()
 		healthServer.SetServingStatus("auth-service", grpc_health_v1.HealthCheckResponse_SERVING)
