@@ -4,19 +4,18 @@ import (
 	"context"
 	"log/slog"
 
-	auth_pb "remaster/shared/proto/auth"
+	pb "remaster/shared/proto/auth"
 
 	"remaster/services/auth/models"
 	"remaster/services/auth/services"
 
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type AuthHandler struct {
-	auth_pb.UnimplementedAuthServiceServer
+	pb.UnimplementedAuthServiceServer
 	authService *services.AuthService
 	logger      *slog.Logger
 }
@@ -28,8 +27,8 @@ func NewAuthHandler(authService *services.AuthService, logger *slog.Logger) *Aut
 	}
 }
 
-func (c *AuthHandler) Register(ctx context.Context, req *models.RegisterRequest) (*models.RegisterResponse, error) {
-	// logger.Info("Registration request for email: %s", req.Email)
+func (c *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
+	c.logger.Info("Registration request for email", "registration", req.Email)
 
 	metadata := extractRequestMetadata(ctx)
 
@@ -42,27 +41,31 @@ func (c *AuthHandler) Register(ctx context.Context, req *models.RegisterRequest)
 		UserType:  models.UserType(req.UserType),
 	}
 
-	authResp, err := c.authService.Register(ctx, registerReq, metadata)
+	resp, err := c.authService.CreateUser(ctx, registerReq, metadata)
 	if err != nil {
-		// logger.Printf("Registration failed for %s: %v", req.Email, err)
-		return &models.RegisterResponse{
+		c.logger.Error("Registration failed", "error", err)
+		return &pb.RegisterResponse{
 			Success: false,
 			Message: "Registration failed",
-		}, status.Error(codes.Internal, "internal server error")
+		}, err
 	}
 
-	// logger.Printf("User registered successfully: %s", authResp.User.ID)
+	pbResp := &pb.RegisterResponse{
+		Success:      true,
+		Message:      "Registration successful",
+		UserId:       resp.User.ID,
+		AccessToken:  resp.AccessToken,
+		RefreshToken: resp.RefreshToken,
+		ExpiresAt:    resp.ExpiresAt,
+		UserType:     pb.UserType(pb.UserType_value[string(resp.User.UserType)]),
+		IsActive:     resp.User.IsActive,
+		IsVerified:   resp.User.IsVerified,
+		CreatedAt:    timestamppb.New(resp.User.CreatedAt),
+	}
 
-	return &models.RegisterResponse{
-		Success: true,
-		Message: "Registration successful",
-		AuthResponse: models.AuthResponse{
-			User:         authResp.User,
-			AccessToken:  authResp.AccessToken,
-			RefreshToken: authResp.RefreshToken,
-			ExpiresAt:    authResp.ExpiresAt,
-		},
-	}, nil
+	c.logger.Info("User registered successfully:", req.Email, resp.User.ID)
+
+	return pbResp, nil
 }
 
 func extractRequestMetadata(ctx context.Context) *models.RequestMetadata {
