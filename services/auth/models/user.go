@@ -55,6 +55,7 @@ type RefreshToken struct {
 	UserAgent string             `bson:"user_agent,omitempty" json:"user_agent,omitempty"`
 	IP        string             `bson:"ip,omitempty" json:"ip,omitempty"`
 }
+
 type LoginAttempt struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	Email     string             `bson:"email" json:"email"`
@@ -149,6 +150,10 @@ func (u *User) BeforeCreate() {
 	}
 }
 
+func (u *User) BeforeUpdate() {
+	u.UpdatedAt = time.Now()
+}
+
 func (req *RegisterRequest) ValidateRegisterRequest() error {
 	var errs []string
 
@@ -158,15 +163,18 @@ func (req *RegisterRequest) ValidateRegisterRequest() error {
 	if len(req.Password) < 8 {
 		errs = append(errs, "password must be at least 8 characters long")
 	}
-	if strings.TrimSpace(req.FirstName) == "" {
-		errs = append(errs, "first name is required")
+	if strings.TrimSpace(req.FirstName) == "" || len(req.FirstName) < 2 || len(req.FirstName) > 50 {
+		errs = append(errs, "first name must be between 2 and 50 characters")
 	}
-	if strings.TrimSpace(req.LastName) == "" {
-		errs = append(errs, "last name is required")
+	if strings.TrimSpace(req.LastName) == "" || len(req.LastName) < 2 || len(req.LastName) > 50 {
+		errs = append(errs, "last name must be between 2 and 50 characters")
 	}
 	if req.UserType != UserTypeMaster && req.UserType != UserTypeClient {
-		errs = append(errs, "invalid user type")
+		errs = append(errs, "invalid user type, must be 'client' or 'master'")
 	}
 
-	return errors.New(strings.Join(errs, ", "))
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, ", "))
+	}
+	return nil
 }
