@@ -6,7 +6,7 @@ option go_package = "remaster/shared/proto/auth";
 import "google/protobuf/timestamp.proto";
 
 service AuthService {
-  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Registration(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
@@ -18,7 +18,7 @@ service AuthService {
 
 
 enum UserType {
-  USER_TYPE_UNSPECIFIED = 0;
+  USER_TYPE_ANONYMOUS = 0;
   USER_TYPE_CLIENT = 1;
   USER_TYPE_MASTER = 2;
   USER_TYPE_ADMIN = 3;
@@ -40,7 +40,11 @@ message RegisterResponse {
   string user_id = 3;
   string access_token = 4;
   string refresh_token = 5;
-  int64 expires_at = 6;
+  int64 expires_at = 6; // Время истечения в Unix timestamp
+  UserType user_type = 7;
+  bool is_active = 8;
+  bool is_verified = 9;
+  google.protobuf.Timestamp created_at = 10;
 }
 
 // Login
@@ -57,6 +61,10 @@ message LoginResponse {
   string refresh_token = 5;
   int64 expires_at = 6;
   UserType user_type = 7;
+  bool is_active = 8;
+  bool is_verified = 9;
+  google.protobuf.Timestamp last_login_at = 10;
+  string profile_image = 11;
 }
 
 // Tokern refresh
@@ -70,6 +78,7 @@ message RefreshTokenResponse {
   string access_token = 3;
   string refresh_token = 4;
   int64 expires_at = 5;
+  google.protobuf.Timestamp created_at = 6;
 }
 
 // Token validation
@@ -84,6 +93,9 @@ message ValidateTokenResponse {
   UserType user_type = 4;
   int64 expires_at = 5;
   string message = 6;
+  bool is_active = 7;
+  bool is_verified = 8;
+  google.protobuf.Timestamp last_login_at = 9;
 }
 
 // Logoout
@@ -107,6 +119,7 @@ message ChangePasswordRequest {
 message ChangePasswordResponse {
   bool success = 1;
   string message = 2;
+  google.protobuf.Timestamp password_changed_at = 3;
 }
 
 // Google OAuth
@@ -123,9 +136,10 @@ message GoogleLoginResponse {
   string refresh_token = 5;
   int64 expires_at = 6;
   bool is_new_user = 7;
+  string google_email = 8;
+  string profile_image = 9;
 }
 
-// Health check
 message HealthRequest {}
 
 message HealthResponse {

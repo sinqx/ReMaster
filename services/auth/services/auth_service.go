@@ -46,10 +46,10 @@ func NewAuthService(
 }
 
 type AuthServiceInterface interface {
-	Register(ctx context.Context, req *models.RegisterRequest) (string, error)
+	CreateUser(ctx context.Context, req *models.RegisterRequest) (string, error)
 }
 
-func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest, metadata *models.RequestMetadata) (*models.AuthResponse, error) {
+func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterRequest, metadata *models.RequestMetadata) (*models.AuthResponse, error) {
 	// s.logger.Info("Registering user", "email", req.Email)
 
 	if err := req.ValidateRegisterRequest(); err != nil {

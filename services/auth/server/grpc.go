@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 
+	auth_pb "remaster/shared/proto/auth"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -35,6 +37,8 @@ func (s *Server) startGRPCServer(ctx context.Context) error {
 	if s.Config.GRPC.EnableReflection {
 		reflection.Register(s.grpcServer)
 	}
+
+	auth_pb.RegisterAuthServiceServer(s.grpcServer, s.authHandler)
 
 	// start goroutine for graceful shutdown
 	go func() {
