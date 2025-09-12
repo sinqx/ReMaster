@@ -25,25 +25,25 @@ const (
 type UserType int32
 
 const (
-	UserType_USER_TYPE_UNSPECIFIED UserType = 0
-	UserType_USER_TYPE_CLIENT      UserType = 1
-	UserType_USER_TYPE_MASTER      UserType = 2
-	UserType_USER_TYPE_ADMIN       UserType = 3
+	UserType_USER_TYPE_ANONYMOUS UserType = 0
+	UserType_USER_TYPE_CLIENT    UserType = 1
+	UserType_USER_TYPE_MASTER    UserType = 2
+	UserType_USER_TYPE_ADMIN     UserType = 3
 )
 
 // Enum value maps for UserType.
 var (
 	UserType_name = map[int32]string{
-		0: "USER_TYPE_UNSPECIFIED",
+		0: "USER_TYPE_ANONYMOUS",
 		1: "USER_TYPE_CLIENT",
 		2: "USER_TYPE_MASTER",
 		3: "USER_TYPE_ADMIN",
 	}
 	UserType_value = map[string]int32{
-		"USER_TYPE_UNSPECIFIED": 0,
-		"USER_TYPE_CLIENT":      1,
-		"USER_TYPE_MASTER":      2,
-		"USER_TYPE_ADMIN":       3,
+		"USER_TYPE_ANONYMOUS": 0,
+		"USER_TYPE_CLIENT":    1,
+		"USER_TYPE_MASTER":    2,
+		"USER_TYPE_ADMIN":     3,
 	}
 )
 
@@ -156,7 +156,7 @@ func (x *RegisterRequest) GetUserType() UserType {
 	if x != nil {
 		return x.UserType
 	}
-	return UserType_USER_TYPE_UNSPECIFIED
+	return UserType_USER_TYPE_ANONYMOUS
 }
 
 type RegisterResponse struct {
@@ -166,7 +166,11 @@ type RegisterResponse struct {
 	UserId        string                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	AccessToken   string                 `protobuf:"bytes,4,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
 	RefreshToken  string                 `protobuf:"bytes,5,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
-	ExpiresAt     int64                  `protobuf:"varint,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	ExpiresAt     int64                  `protobuf:"varint,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"` // Время истечения в Unix timestamp
+	UserType      UserType               `protobuf:"varint,7,opt,name=user_type,json=userType,proto3,enum=auth.UserType" json:"user_type,omitempty"`
+	IsActive      bool                   `protobuf:"varint,8,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	IsVerified    bool                   `protobuf:"varint,9,opt,name=is_verified,json=isVerified,proto3" json:"is_verified,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -243,6 +247,34 @@ func (x *RegisterResponse) GetExpiresAt() int64 {
 	return 0
 }
 
+func (x *RegisterResponse) GetUserType() UserType {
+	if x != nil {
+		return x.UserType
+	}
+	return UserType_USER_TYPE_ANONYMOUS
+}
+
+func (x *RegisterResponse) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *RegisterResponse) GetIsVerified() bool {
+	if x != nil {
+		return x.IsVerified
+	}
+	return false
+}
+
+func (x *RegisterResponse) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
 // Login
 type LoginRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -305,6 +337,10 @@ type LoginResponse struct {
 	RefreshToken  string                 `protobuf:"bytes,5,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	ExpiresAt     int64                  `protobuf:"varint,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	UserType      UserType               `protobuf:"varint,7,opt,name=user_type,json=userType,proto3,enum=auth.UserType" json:"user_type,omitempty"`
+	IsActive      bool                   `protobuf:"varint,8,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	IsVerified    bool                   `protobuf:"varint,9,opt,name=is_verified,json=isVerified,proto3" json:"is_verified,omitempty"`
+	LastLoginAt   *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=last_login_at,json=lastLoginAt,proto3" json:"last_login_at,omitempty"`
+	ProfileImage  string                 `protobuf:"bytes,11,opt,name=profile_image,json=profileImage,proto3" json:"profile_image,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -385,7 +421,35 @@ func (x *LoginResponse) GetUserType() UserType {
 	if x != nil {
 		return x.UserType
 	}
-	return UserType_USER_TYPE_UNSPECIFIED
+	return UserType_USER_TYPE_ANONYMOUS
+}
+
+func (x *LoginResponse) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *LoginResponse) GetIsVerified() bool {
+	if x != nil {
+		return x.IsVerified
+	}
+	return false
+}
+
+func (x *LoginResponse) GetLastLoginAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastLoginAt
+	}
+	return nil
+}
+
+func (x *LoginResponse) GetProfileImage() string {
+	if x != nil {
+		return x.ProfileImage
+	}
+	return ""
 }
 
 // Tokern refresh
@@ -440,6 +504,7 @@ type RefreshTokenResponse struct {
 	AccessToken   string                 `protobuf:"bytes,3,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
 	RefreshToken  string                 `protobuf:"bytes,4,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	ExpiresAt     int64                  `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -509,6 +574,13 @@ func (x *RefreshTokenResponse) GetExpiresAt() int64 {
 	return 0
 }
 
+func (x *RefreshTokenResponse) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
 // Token validation
 type ValidateTokenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -562,6 +634,9 @@ type ValidateTokenResponse struct {
 	UserType      UserType               `protobuf:"varint,4,opt,name=user_type,json=userType,proto3,enum=auth.UserType" json:"user_type,omitempty"`
 	ExpiresAt     int64                  `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	Message       string                 `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
+	IsActive      bool                   `protobuf:"varint,7,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	IsVerified    bool                   `protobuf:"varint,8,opt,name=is_verified,json=isVerified,proto3" json:"is_verified,omitempty"`
+	LastLoginAt   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_login_at,json=lastLoginAt,proto3" json:"last_login_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -621,7 +696,7 @@ func (x *ValidateTokenResponse) GetUserType() UserType {
 	if x != nil {
 		return x.UserType
 	}
-	return UserType_USER_TYPE_UNSPECIFIED
+	return UserType_USER_TYPE_ANONYMOUS
 }
 
 func (x *ValidateTokenResponse) GetExpiresAt() int64 {
@@ -636,6 +711,27 @@ func (x *ValidateTokenResponse) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+func (x *ValidateTokenResponse) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *ValidateTokenResponse) GetIsVerified() bool {
+	if x != nil {
+		return x.IsVerified
+	}
+	return false
+}
+
+func (x *ValidateTokenResponse) GetLastLoginAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastLoginAt
+	}
+	return nil
 }
 
 // Logoout
@@ -805,11 +901,12 @@ func (x *ChangePasswordRequest) GetNewPassword() string {
 }
 
 type ChangePasswordResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Success           bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message           string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	PasswordChangedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=password_changed_at,json=passwordChangedAt,proto3" json:"password_changed_at,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ChangePasswordResponse) Reset() {
@@ -854,6 +951,13 @@ func (x *ChangePasswordResponse) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+func (x *ChangePasswordResponse) GetPasswordChangedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PasswordChangedAt
+	}
+	return nil
 }
 
 // Google OAuth
@@ -906,7 +1010,7 @@ func (x *GoogleLoginRequest) GetUserType() UserType {
 	if x != nil {
 		return x.UserType
 	}
-	return UserType_USER_TYPE_UNSPECIFIED
+	return UserType_USER_TYPE_ANONYMOUS
 }
 
 type GoogleLoginResponse struct {
@@ -918,6 +1022,8 @@ type GoogleLoginResponse struct {
 	RefreshToken  string                 `protobuf:"bytes,5,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	ExpiresAt     int64                  `protobuf:"varint,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	IsNewUser     bool                   `protobuf:"varint,7,opt,name=is_new_user,json=isNewUser,proto3" json:"is_new_user,omitempty"`
+	GoogleEmail   string                 `protobuf:"bytes,8,opt,name=google_email,json=googleEmail,proto3" json:"google_email,omitempty"`
+	ProfileImage  string                 `protobuf:"bytes,9,opt,name=profile_image,json=profileImage,proto3" json:"profile_image,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1001,7 +1107,20 @@ func (x *GoogleLoginResponse) GetIsNewUser() bool {
 	return false
 }
 
-// Health check
+func (x *GoogleLoginResponse) GetGoogleEmail() string {
+	if x != nil {
+		return x.GoogleEmail
+	}
+	return ""
+}
+
+func (x *GoogleLoginResponse) GetProfileImage() string {
+	if x != nil {
+		return x.ProfileImage
+	}
+	return ""
+}
+
 type HealthRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1111,7 +1230,7 @@ const file_auth_proto_rawDesc = "" +
 	"first_name\x18\x03 \x01(\tR\tfirstName\x12\x1b\n" +
 	"\tlast_name\x18\x04 \x01(\tR\blastName\x12\x14\n" +
 	"\x05phone\x18\x05 \x01(\tR\x05phone\x12+\n" +
-	"\tuser_type\x18\x06 \x01(\x0e2\x0e.auth.UserTypeR\buserType\"\xc6\x01\n" +
+	"\tuser_type\x18\x06 \x01(\x0e2\x0e.auth.UserTypeR\buserType\"\xec\x02\n" +
 	"\x10RegisterResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x17\n" +
@@ -1119,10 +1238,17 @@ const file_auth_proto_rawDesc = "" +
 	"\faccess_token\x18\x04 \x01(\tR\vaccessToken\x12#\n" +
 	"\rrefresh_token\x18\x05 \x01(\tR\frefreshToken\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x06 \x01(\x03R\texpiresAt\"@\n" +
+	"expires_at\x18\x06 \x01(\x03R\texpiresAt\x12+\n" +
+	"\tuser_type\x18\a \x01(\x0e2\x0e.auth.UserTypeR\buserType\x12\x1b\n" +
+	"\tis_active\x18\b \x01(\bR\bisActive\x12\x1f\n" +
+	"\vis_verified\x18\t \x01(\bR\n" +
+	"isVerified\x129\n" +
+	"\n" +
+	"created_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"@\n" +
 	"\fLoginRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"\xf0\x01\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x93\x03\n" +
 	"\rLoginResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x17\n" +
@@ -1131,18 +1257,26 @@ const file_auth_proto_rawDesc = "" +
 	"\rrefresh_token\x18\x05 \x01(\tR\frefreshToken\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\x06 \x01(\x03R\texpiresAt\x12+\n" +
-	"\tuser_type\x18\a \x01(\x0e2\x0e.auth.UserTypeR\buserType\":\n" +
+	"\tuser_type\x18\a \x01(\x0e2\x0e.auth.UserTypeR\buserType\x12\x1b\n" +
+	"\tis_active\x18\b \x01(\bR\bisActive\x12\x1f\n" +
+	"\vis_verified\x18\t \x01(\bR\n" +
+	"isVerified\x12>\n" +
+	"\rlast_login_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\vlastLoginAt\x12#\n" +
+	"\rprofile_image\x18\v \x01(\tR\fprofileImage\":\n" +
 	"\x13RefreshTokenRequest\x12#\n" +
-	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\"\xb1\x01\n" +
+	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\"\xec\x01\n" +
 	"\x14RefreshTokenResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12!\n" +
 	"\faccess_token\x18\x03 \x01(\tR\vaccessToken\x12#\n" +
 	"\rrefresh_token\x18\x04 \x01(\tR\frefreshToken\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"9\n" +
+	"expires_at\x18\x05 \x01(\x03R\texpiresAt\x129\n" +
+	"\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"9\n" +
 	"\x14ValidateTokenRequest\x12!\n" +
-	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\"\xc2\x01\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\"\xc0\x02\n" +
 	"\x15ValidateTokenResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x14\n" +
@@ -1150,7 +1284,11 @@ const file_auth_proto_rawDesc = "" +
 	"\tuser_type\x18\x04 \x01(\x0e2\x0e.auth.UserTypeR\buserType\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\x05 \x01(\x03R\texpiresAt\x12\x18\n" +
-	"\amessage\x18\x06 \x01(\tR\amessage\"M\n" +
+	"\amessage\x18\x06 \x01(\tR\amessage\x12\x1b\n" +
+	"\tis_active\x18\a \x01(\bR\bisActive\x12\x1f\n" +
+	"\vis_verified\x18\b \x01(\bR\n" +
+	"isVerified\x12>\n" +
+	"\rlast_login_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\vlastLoginAt\"M\n" +
 	"\rLogoutRequest\x12#\n" +
 	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"D\n" +
@@ -1160,13 +1298,14 @@ const file_auth_proto_rawDesc = "" +
 	"\x15ChangePasswordRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12!\n" +
 	"\fold_password\x18\x02 \x01(\tR\voldPassword\x12!\n" +
-	"\fnew_password\x18\x03 \x01(\tR\vnewPassword\"L\n" +
+	"\fnew_password\x18\x03 \x01(\tR\vnewPassword\"\x98\x01\n" +
 	"\x16ChangePasswordResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"d\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12J\n" +
+	"\x13password_changed_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11passwordChangedAt\"d\n" +
 	"\x12GoogleLoginRequest\x12!\n" +
 	"\fgoogle_token\x18\x01 \x01(\tR\vgoogleToken\x12+\n" +
-	"\tuser_type\x18\x02 \x01(\x0e2\x0e.auth.UserTypeR\buserType\"\xe9\x01\n" +
+	"\tuser_type\x18\x02 \x01(\x0e2\x0e.auth.UserTypeR\buserType\"\xb1\x02\n" +
 	"\x13GoogleLoginResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x17\n" +
@@ -1175,7 +1314,9 @@ const file_auth_proto_rawDesc = "" +
 	"\rrefresh_token\x18\x05 \x01(\tR\frefreshToken\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\x06 \x01(\x03R\texpiresAt\x12\x1e\n" +
-	"\vis_new_user\x18\a \x01(\bR\tisNewUser\"\x0f\n" +
+	"\vis_new_user\x18\a \x01(\bR\tisNewUser\x12!\n" +
+	"\fgoogle_email\x18\b \x01(\tR\vgoogleEmail\x12#\n" +
+	"\rprofile_image\x18\t \x01(\tR\fprofileImage\"\x0f\n" +
 	"\rHealthRequest\"\xd7\x01\n" +
 	"\x0eHealthResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x128\n" +
@@ -1183,14 +1324,14 @@ const file_auth_proto_rawDesc = "" +
 	"\x06checks\x18\x03 \x03(\v2 .auth.HealthResponse.ChecksEntryR\x06checks\x1a9\n" +
 	"\vChecksEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*f\n" +
-	"\bUserType\x12\x19\n" +
-	"\x15USER_TYPE_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*d\n" +
+	"\bUserType\x12\x17\n" +
+	"\x13USER_TYPE_ANONYMOUS\x10\x00\x12\x14\n" +
 	"\x10USER_TYPE_CLIENT\x10\x01\x12\x14\n" +
 	"\x10USER_TYPE_MASTER\x10\x02\x12\x13\n" +
-	"\x0fUSER_TYPE_ADMIN\x10\x032\x86\x04\n" +
-	"\vAuthService\x129\n" +
-	"\bRegister\x12\x15.auth.RegisterRequest\x1a\x16.auth.RegisterResponse\x120\n" +
+	"\x0fUSER_TYPE_ADMIN\x10\x032\x8a\x04\n" +
+	"\vAuthService\x12=\n" +
+	"\fRegistration\x12\x15.auth.RegisterRequest\x1a\x16.auth.RegisterResponse\x120\n" +
 	"\x05Login\x12\x12.auth.LoginRequest\x1a\x13.auth.LoginResponse\x12E\n" +
 	"\fRefreshToken\x12\x19.auth.RefreshTokenRequest\x1a\x1a.auth.RefreshTokenResponse\x12H\n" +
 	"\rValidateToken\x12\x1a.auth.ValidateTokenRequest\x1a\x1b.auth.ValidateTokenResponse\x123\n" +
@@ -1236,32 +1377,38 @@ var file_auth_proto_goTypes = []any{
 }
 var file_auth_proto_depIdxs = []int32{
 	0,  // 0: auth.RegisterRequest.user_type:type_name -> auth.UserType
-	0,  // 1: auth.LoginResponse.user_type:type_name -> auth.UserType
-	0,  // 2: auth.ValidateTokenResponse.user_type:type_name -> auth.UserType
-	0,  // 3: auth.GoogleLoginRequest.user_type:type_name -> auth.UserType
-	18, // 4: auth.HealthResponse.timestamp:type_name -> google.protobuf.Timestamp
-	17, // 5: auth.HealthResponse.checks:type_name -> auth.HealthResponse.ChecksEntry
-	1,  // 6: auth.AuthService.Register:input_type -> auth.RegisterRequest
-	3,  // 7: auth.AuthService.Login:input_type -> auth.LoginRequest
-	5,  // 8: auth.AuthService.RefreshToken:input_type -> auth.RefreshTokenRequest
-	7,  // 9: auth.AuthService.ValidateToken:input_type -> auth.ValidateTokenRequest
-	9,  // 10: auth.AuthService.Logout:input_type -> auth.LogoutRequest
-	11, // 11: auth.AuthService.ChangePassword:input_type -> auth.ChangePasswordRequest
-	13, // 12: auth.AuthService.GoogleLogin:input_type -> auth.GoogleLoginRequest
-	15, // 13: auth.AuthService.Health:input_type -> auth.HealthRequest
-	2,  // 14: auth.AuthService.Register:output_type -> auth.RegisterResponse
-	4,  // 15: auth.AuthService.Login:output_type -> auth.LoginResponse
-	6,  // 16: auth.AuthService.RefreshToken:output_type -> auth.RefreshTokenResponse
-	8,  // 17: auth.AuthService.ValidateToken:output_type -> auth.ValidateTokenResponse
-	10, // 18: auth.AuthService.Logout:output_type -> auth.LogoutResponse
-	12, // 19: auth.AuthService.ChangePassword:output_type -> auth.ChangePasswordResponse
-	14, // 20: auth.AuthService.GoogleLogin:output_type -> auth.GoogleLoginResponse
-	16, // 21: auth.AuthService.Health:output_type -> auth.HealthResponse
-	14, // [14:22] is the sub-list for method output_type
-	6,  // [6:14] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	0,  // 1: auth.RegisterResponse.user_type:type_name -> auth.UserType
+	18, // 2: auth.RegisterResponse.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 3: auth.LoginResponse.user_type:type_name -> auth.UserType
+	18, // 4: auth.LoginResponse.last_login_at:type_name -> google.protobuf.Timestamp
+	18, // 5: auth.RefreshTokenResponse.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 6: auth.ValidateTokenResponse.user_type:type_name -> auth.UserType
+	18, // 7: auth.ValidateTokenResponse.last_login_at:type_name -> google.protobuf.Timestamp
+	18, // 8: auth.ChangePasswordResponse.password_changed_at:type_name -> google.protobuf.Timestamp
+	0,  // 9: auth.GoogleLoginRequest.user_type:type_name -> auth.UserType
+	18, // 10: auth.HealthResponse.timestamp:type_name -> google.protobuf.Timestamp
+	17, // 11: auth.HealthResponse.checks:type_name -> auth.HealthResponse.ChecksEntry
+	1,  // 12: auth.AuthService.Registration:input_type -> auth.RegisterRequest
+	3,  // 13: auth.AuthService.Login:input_type -> auth.LoginRequest
+	5,  // 14: auth.AuthService.RefreshToken:input_type -> auth.RefreshTokenRequest
+	7,  // 15: auth.AuthService.ValidateToken:input_type -> auth.ValidateTokenRequest
+	9,  // 16: auth.AuthService.Logout:input_type -> auth.LogoutRequest
+	11, // 17: auth.AuthService.ChangePassword:input_type -> auth.ChangePasswordRequest
+	13, // 18: auth.AuthService.GoogleLogin:input_type -> auth.GoogleLoginRequest
+	15, // 19: auth.AuthService.Health:input_type -> auth.HealthRequest
+	2,  // 20: auth.AuthService.Registration:output_type -> auth.RegisterResponse
+	4,  // 21: auth.AuthService.Login:output_type -> auth.LoginResponse
+	6,  // 22: auth.AuthService.RefreshToken:output_type -> auth.RefreshTokenResponse
+	8,  // 23: auth.AuthService.ValidateToken:output_type -> auth.ValidateTokenResponse
+	10, // 24: auth.AuthService.Logout:output_type -> auth.LogoutResponse
+	12, // 25: auth.AuthService.ChangePassword:output_type -> auth.ChangePasswordResponse
+	14, // 26: auth.AuthService.GoogleLogin:output_type -> auth.GoogleLoginResponse
+	16, // 27: auth.AuthService.Health:output_type -> auth.HealthResponse
+	20, // [20:28] is the sub-list for method output_type
+	12, // [12:20] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_auth_proto_init() }
