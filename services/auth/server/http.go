@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	auth_pb "remaster/shared/proto/auth"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,6 +19,7 @@ func (s *Server) startHTTPServer(ctx context.Context) error {
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
 
+	router.POST("/register", s.handleHTTPRegister)
 	router.GET("/health", func(c *gin.Context) {
 		mongoErr := s.MongoManager.HealthCheck(ctx)
 		redisErr := s.RedisManager.HealthCheck(ctx)
@@ -89,4 +92,28 @@ func (s *Server) startHTTPServer(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *Server) handleHTTPRegister(c *gin.Context) {
+    var req struct {
+        Email    string `json:"email"`
+        Password string `json:"password"`
+    }
+
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+        return
+    }
+
+    resp, err := s.authHandler.Registration(c, &auth_pb.RegisterRequest{
+        Email:    req.Email,
+        Password: req.Password,
+    })
+    if err != nil {
+        s.Logger.Error("registration error", "error", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "registration failed"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": resp.Message})
 }
