@@ -19,12 +19,11 @@ import (
 	"remaster/services/auth/utils"
 	cfg "remaster/shared"
 	"remaster/shared/connection"
-	"remaster/shared/errors"
 )
 
 type Server struct {
 	authHandler *handlers.AuthHandler
-	Config *cfg.Config
+	Config      *cfg.Config
 
 	MongoManager *connection.MongoManager
 	RedisManager *connection.RedisManager
@@ -32,7 +31,7 @@ type Server struct {
 	httpServer *http.Server
 	grpcServer *grpc.Server
 
-	v      *errors.Validator
+	// v      *errors.Validator
 	Logger *slog.Logger
 }
 
