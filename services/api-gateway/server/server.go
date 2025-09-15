@@ -66,10 +66,6 @@ func (s *Server) Start() error {
 func (s *Server) initializeGRPCClients() error {
 	services := map[string]string{
 		"auth": "auth-service:9090",
-		// "user":         	"user-service:9091",
-		// "order":       	"order-service:9092",
-		// "media":      	"media-service:9093",
-		// "notification":  "notification-service:9094",
 	}
 
 	for serviceName, address := range services {

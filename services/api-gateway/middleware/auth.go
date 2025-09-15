@@ -42,8 +42,8 @@ func RequireAuth() gin.HandlerFunc {
 
 		// TODO: Validate JWT token
 
-		c.Set("user_id", "some_user_id")
-		c.Set("user_role", "student")
+		// c.Set("user_id", "some_user_id")
+		// c.Set("user_role", "student")
 
 		c.Next()
 	}
