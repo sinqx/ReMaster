@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -24,21 +26,30 @@ type Server struct {
 	Config *cfg.Config
 	Logger *slog.Logger
 
-	httpServer      *http.Server
-	grpcConnections map[string]*grpc.ClientConn
+	httpServer *http.Server
+	router     *gin.Engine
 
+	// GRPC connections
+	grpcConnections map[string]*grpc.ClientConn
+	connMutex       sync.RWMutex
+
+	// Database connections
 	MongoManager *connection.MongoManager
 	RedisManager *connection.RedisManager
 
+	// GRPC clients
 	authClient auth_pb.AuthServiceClient
 }
 
-func NewServer(config *cfg.Config, logger *slog.Logger, mongoMgr *connection.MongoManager, redisMgr *connection.RedisManager) *Server {
+func NewServer(config *cfg.Config, logger *slog.Logger) *Server {
+	// Set Gin mode based on environment
+	if config.App.Environment == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	return &Server{
 		Config:          config,
 		Logger:          logger,
-		MongoManager:    mongoMgr,
-		RedisManager:    redisMgr,
 		grpcConnections: make(map[string]*grpc.ClientConn),
 	}
 }
@@ -47,48 +58,104 @@ func (s *Server) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// GRPC clients
-	if err := s.initializeGRPCClients(); err != nil {
-		return err
+	s.Logger.Info("Starting API Gateway server",
+		"environment", s.Config.App.Environment,
+		"http_port", s.Config.HTTP.Port,
+	)
+
+	// Initialize components
+	if err := s.initialize(); err != nil {
+		s.Logger.Error("Failed to initialize server", "error", err)
+		return fmt.Errorf("initialization failed: %w", err)
 	}
 
+	// Setup routes
+	s.setupRoutes()
+
+	// Start server with graceful shutdown
 	g, ctx := errgroup.WithContext(ctx)
 
-	// HTTP server
 	g.Go(func() error {
-		return s.startHTTPServer(ctx)
+		return s.runHTTPServer(ctx)
 	})
 
-	// Graceful shutdown
-	return s.waitForShutdown(ctx, cancel, g)
+	return s.shutdown(ctx, cancel, g)
+}
+
+func (s *Server) initialize() error {
+	s.Logger.Info("Initializing server components")
+
+	// Initialize GRPC clients with retries
+	if err := s.initializeGRPCClients(); err != nil {
+		return fmt.Errorf("failed to initialize GRPC clients: %w", err)
+	}
+
+	s.Logger.Info("Server initialization completed successfully")
+	return nil
 }
 
 func (s *Server) initializeGRPCClients() error {
-	services := map[string]string{
-		"auth": "auth-service:9090",
+	authAddr, err := s.Config.GetServiceGRPCAddr("auth")
+	if err != nil {
+		return fmt.Errorf("failed to get auth service address: %w", err)
+	}
+	services := []struct {
+		name    string
+		address string
+		init    func(*grpc.ClientConn)
+	}{
+		{
+			name:    "auth",
+			address: authAddr,
+			init: func(conn *grpc.ClientConn) {
+				s.authClient = auth_pb.NewAuthServiceClient(conn)
+			},
+		},
 	}
 
-	for serviceName, address := range services {
-		if err := s.connectToService(serviceName, address); err != nil {
-			return fmt.Errorf("failed to connect to %s: %w", serviceName, err)
+	for _, service := range services {
+		s.Logger.Info("Connecting to GRPC service",
+			"service", service.name,
+			"address", service.address,
+		)
+
+		conn, err := s.connectToService(service.name, service.address)
+		if err != nil {
+			s.Logger.Error("Failed to connect to service",
+				"service", service.name,
+				"error", err,
+			)
+			// Continue connecting to other services even if one fails
+			continue
 		}
+
+		s.connMutex.Lock()
+		s.grpcConnections[service.name] = conn
+		s.connMutex.Unlock()
+
+		// Initialize the specific client
+		service.init(conn)
+
+		s.Logger.Info("Successfully connected to service",
+			"service", service.name,
+			"state", conn.GetState().String(),
+		)
 	}
 
 	return nil
 }
 
-func (s *Server) connectToService(serviceName, address string) error {
-	s.Logger.Info("Connecting to service", "service", serviceName, "address", address)
-
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return err
-	}
-
-	conn.Connect()
-	connectCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (s *Server) connectToService(serviceName, address string) (*grpc.ClientConn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Create connection with retry interceptor
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to %s: %w", serviceName, err)
+	}
+
+	// Wait for connection to be ready
 	for {
 		state := conn.GetState()
 		if state == connectivity.Ready {
@@ -96,34 +163,104 @@ func (s *Server) connectToService(serviceName, address string) error {
 		}
 		if state == connectivity.TransientFailure || state == connectivity.Shutdown {
 			conn.Close()
-			return fmt.Errorf("connection failed: state %v", state)
+			return nil, fmt.Errorf("connection failed with state: %v", state)
 		}
-		if !conn.WaitForStateChange(connectCtx, state) {
+		if !conn.WaitForStateChange(ctx, state) {
 			conn.Close()
-			return fmt.Errorf("connection timeout")
+			return nil, fmt.Errorf("connection timeout for %s", serviceName)
 		}
 	}
 
-	s.grpcConnections[serviceName] = conn
-	s.authClient = auth_pb.NewAuthServiceClient(conn)
+	return conn, nil
+}
 
-	s.Logger.Info("Connected to service", "service", serviceName)
+func (s *Server) runHTTPServer(ctx context.Context) error {
+	s.httpServer = &http.Server{
+		Addr:         fmt.Sprintf("%s:%s", s.Config.HTTP.Host, s.Config.HTTP.Port),
+		Handler:      s.router,
+		ReadTimeout:  s.Config.HTTP.ReadTimeout,
+		WriteTimeout: s.Config.HTTP.WriteTimeout,
+		IdleTimeout:  s.Config.HTTP.IdleTimeout,
+	}
+
+	// Handle graceful shutdown
+	go func() {
+		<-ctx.Done()
+		s.Logger.Info("Shutting down HTTP server")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.Config.HTTP.ShutdownTimeout)
+		defer cancel()
+
+		if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
+			s.Logger.Error("HTTP server forced shutdown", "error", err)
+		}
+	}()
+
+	s.Logger.Info("HTTP server started",
+		"address", s.httpServer.Addr,
+		"read_timeout", s.Config.HTTP.ReadTimeout,
+		"write_timeout", s.Config.HTTP.WriteTimeout,
+	)
+
+	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("HTTP server error: %w", err)
+	}
+
 	return nil
 }
 
-func (s *Server) waitForShutdown(ctx context.Context, cancel context.CancelFunc, g *errgroup.Group) error {
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+func (s *Server) shutdown(ctx context.Context, cancel context.CancelFunc, g *errgroup.Group) error {
+	// Setup signal handling
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
-	case sig := <-stop:
-		s.Logger.Info("shutting down server due to OS signal", "signal", sig.String())
+	case sig := <-sigChan:
+		s.Logger.Info("Received shutdown signal", "signal", sig.String())
 		cancel()
 	case <-ctx.Done():
-		s.Logger.Info("shutting down server due to context cancellation")
+		s.Logger.Info("Context cancelled")
 	}
 
-	s.shutdown()
+	// Start cleanup
+	s.Logger.Info("Starting graceful shutdown")
+	s.Logger.Info("Starting cleanup process")
+
+	// Close GRPC connections
+	s.connMutex.Lock()
+	for name, conn := range s.grpcConnections {
+		if conn != nil {
+			if err := conn.Close(); err != nil {
+				s.Logger.Error("Failed to close GRPC connection",
+					"service", name,
+					"error", err,
+				)
+			} else {
+				s.Logger.Debug("GRPC connection closed", "service", name)
+			}
+		}
+	}
+	s.connMutex.Unlock()
+
+	// Close MongoDB
+	if s.MongoManager != nil {
+		if err := s.MongoManager.Disconnect(ctx); err != nil {
+			s.Logger.Error("Failed to disconnect MongoDB", "error", err)
+		} else {
+			s.Logger.Info("MongoDB disconnected successfully")
+		}
+	}
+
+	// Close Redis
+	if s.RedisManager != nil {
+		if err := s.RedisManager.Disconnect(); err != nil {
+			s.Logger.Error("Failed to disconnect Redis", "error", err)
+		} else {
+			s.Logger.Info("Redis disconnected successfully")
+		}
+	}
+
+	// Wait for all goroutines with timeout
 	done := make(chan error, 1)
 	go func() {
 		done <- g.Wait()
@@ -132,37 +269,14 @@ func (s *Server) waitForShutdown(ctx context.Context, cancel context.CancelFunc,
 	select {
 	case err := <-done:
 		if err != nil && err != context.Canceled {
-			s.Logger.Error("server error during shutdown", "error", err)
+			s.Logger.Error("Error during shutdown", "error", err)
 			return err
 		}
-		s.Logger.Info("server shutdown completed")
+		s.Logger.Info("Graceful shutdown completed")
 	case <-time.After(s.Config.HTTP.ShutdownTimeout):
-		s.Logger.Warn("server shutdown timed out, forcing exit")
-		return fmt.Errorf("shutdown timeout")
+		s.Logger.Error("Shutdown timeout exceeded, forcing exit")
+		return fmt.Errorf("shutdown timeout after %v", s.Config.HTTP.ShutdownTimeout)
 	}
 
 	return nil
-}
-
-func (s *Server) shutdown() {
-	s.Logger.Info("Cleaning up resources...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), s.Config.HTTP.ShutdownTimeout)
-	defer cancel()
-
-	if s.MongoManager != nil {
-		if err := s.MongoManager.Disconnect(ctx); err != nil {
-			s.Logger.Error("Error closing MongoDB", "error", err)
-		} else {
-			s.Logger.Info("MongoDB connection closed")
-		}
-	}
-
-	if s.RedisManager != nil {
-		if err := s.RedisManager.Disconnect(); err != nil {
-			s.Logger.Error("Error closing Redis", "error", err)
-		} else {
-			s.Logger.Info("Redis connection closed")
-		}
-	}
 }
