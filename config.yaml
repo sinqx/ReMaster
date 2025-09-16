@@ -70,3 +70,9 @@ log:
   format: json
   output: stdout
   file:
+
+services:
+  auth:
+    host: auth-service
+    grpc_port: 9090
+    http_port: 8080

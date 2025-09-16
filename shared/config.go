@@ -10,16 +10,17 @@ import (
 )
 
 type Config struct {
-	App   AppConfig   `mapstructure:"app"`
-	HTTP  HTTPConfig  `mapstructure:"http"`
-	GRPC  GRPCConfig  `mapstructure:"grpc"`
-	Mongo MongoConfig `mapstructure:"mongo"`
-	Redis RedisConfig `mapstructure:"redis"`
-	JWT   JWTConfig   `mapstructure:"jwt"`
-	OAuth OAuthConfig `mapstructure:"oauth"`
-	AWS   AWSConfig   `mapstructure:"aws"`
-	Kafka KafkaConfig `mapstructure:"kafka"`
-	Log   LogConfig   `mapstructure:"log"`
+	App      AppConfig              `mapstructure:"app"`
+	HTTP     HTTPConfig             `mapstructure:"http"`
+	GRPC     GRPCConfig             `mapstructure:"grpc"`
+	Mongo    MongoConfig            `mapstructure:"mongo"`
+	Redis    RedisConfig            `mapstructure:"redis"`
+	JWT      JWTConfig              `mapstructure:"jwt"`
+	OAuth    OAuthConfig            `mapstructure:"oauth"`
+	AWS      AWSConfig              `mapstructure:"aws"`
+	Kafka    KafkaConfig            `mapstructure:"kafka"`
+	Log      LogConfig              `mapstructure:"log"`
+	Services map[string]ServiceAddr `mapstructure:"services"`
 }
 
 type AppConfig struct {
@@ -31,6 +32,7 @@ type AppConfig struct {
 type HTTPConfig struct {
 	Port            string        `mapstructure:"port" validate:"required"`
 	Host            string        `mapstructure:"host"`
+	IdleTimeout     time.Duration `mapstructure:"idle_timeout"`
 	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
 	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
@@ -104,28 +106,27 @@ type LogConfig struct {
 	File   string `mapstructure:"file"`
 }
 
+type ServiceAddr struct {
+	Host     string `mapstructure:"host" validate:"required"`
+	GRPCPort string `mapstructure:"grpc_port" validate:"required"`
+	HTTPPort string `mapstructure:"http_port"`
+}
+
 // Load config data from file
 func LoadConfig(configPath ...string) (*Config, error) {
 	// Viper configuration
+	viper.AddConfigPath(".")
+
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 
-	// add search paths
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("./config")
-	viper.AddConfigPath("./configs")
-	viper.AddConfigPath("/etc/remaster")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_", "grpc_port", "GRPCPort"))
 
-	if len(configPath) > 0 && configPath[0] != "" {
-		viper.AddConfigPath(configPath[0])
-	}
-
-	// Viper environment
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix("MASTERS")
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	setDefaults()
+	bindEnvVars()
 
 	// try to read config file
 	if err := viper.ReadInConfig(); err != nil {
@@ -165,6 +166,7 @@ func setDefaults() {
 	viper.SetDefault("http.port", "8080")
 	viper.SetDefault("http.host", "0.0.0.0")
 	viper.SetDefault("http.read_timeout", "10s")
+	viper.SetDefault("http.idle_timeout", "5s")
 	viper.SetDefault("http.write_timeout", "10s")
 	viper.SetDefault("http.shutdown_timeout", "5s")
 
@@ -310,12 +312,21 @@ func validateConfig(cfg *Config) error {
 }
 
 // address helpers
-func (c *Config) GetRedisAddr() string {
-	return fmt.Sprintf("%s:%s", c.Redis.Host, c.Redis.Port)
+func (c *Config) GetServiceGRPCAddr(name string) (string, error) {
+	svc, ok := c.Services[name]
+	if !ok {
+		return "", fmt.Errorf("service %s not found in config", name)
+	}
+	return fmt.Sprintf("%s:%s", svc.Host, svc.GRPCPort), nil
 }
-func (c *Config) GetHTTPAddr() string {
-	return fmt.Sprintf("%s:%s", c.HTTP.Host, c.HTTP.Port)
-}
-func (c *Config) GetGRPCAddr() string {
-	return fmt.Sprintf("%s:%s", c.GRPC.Host, c.GRPC.Port)
+
+func (c *Config) GetServiceHTTPAddr(name string) (string, error) {
+	svc, ok := c.Services[name]
+	if !ok {
+		return "", fmt.Errorf("service %s not found in config", name)
+	}
+	if svc.HTTPPort == "" {
+		return "", fmt.Errorf("service %s has no http_port defined", name)
+	}
+	return fmt.Sprintf("%s:%s", svc.Host, svc.HTTPPort), nil
 }

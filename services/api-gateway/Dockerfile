@@ -7,7 +7,13 @@
     
     COPY . .
     
-    RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/gateway-server ./services/api-gateway/main.go
+    # Build the binary with optimizations
+    RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+        go build -ldflags="-w -s -X main.Version=$(git describe --tags --always --dirty) \
+        -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S')" \
+        -a -installsuffix cgo \
+        -o /app/gateway-server \
+        ./services/api-gateway/main.go
     
     FROM alpine:latest
     
@@ -15,6 +21,6 @@
     
     COPY --from=builder /app/gateway-server .
 
-    COPY ../config.yaml /app/config.yaml
+    COPY config.yaml .
     
     CMD ["./gateway-server"]
