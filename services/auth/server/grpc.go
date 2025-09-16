@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net"
 
 	auth_pb "remaster/shared/proto/auth"
@@ -13,8 +12,8 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
-func (s *Server) startGRPCServer(ctx context.Context) error {
-	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%s", s.Config.GRPC.Host, s.Config.GRPC.Port))
+func (s *Server) startGRPCServer(ctx context.Context, grpcAddr string) error {
+	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		s.Logger.Error("failed to listen on gRPC port", "error", err)
 		return err

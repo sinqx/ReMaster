@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -55,16 +56,28 @@ func (s *Server) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(context.Background())
 
+	grpcAddr, err := s.Config.GetServiceGRPCAddr("auth")
+	if err != nil {
+		s.Logger.Error("failed to get auth service address", "error", err)
+		cancel()
+		return fmt.Errorf("failed to get auth service gRPC address: %w", err)
+	}
 	// gRPC
 	g.Go(func() error {
-		s.Logger.Info("gRPC server starting", "host", s.Config.GRPC.Host, "port", s.Config.GRPC.Port)
-		return s.startGRPCServer(ctx)
+		s.Logger.Info("gRPC server starting", "Address", grpcAddr)
+		cancel()
+		return s.startGRPCServer(ctx, grpcAddr)
 	})
 
+	httpAddr, err := s.Config.GetServiceHTTPAddr("auth")
+	if err != nil {
+		s.Logger.Error("failed to get auth service address", "error", err)
+		return fmt.Errorf("failed to get auth service HTTP address: %w", err)
+	}
 	//  HTTP
 	g.Go(func() error {
-		s.Logger.Info("HTTP server starting", "host", s.Config.HTTP.Host, "port", s.Config.HTTP.Port)
-		return s.startHTTPServer(ctx)
+		s.Logger.Info("HTTP server starting", "Address", httpAddr)
+		return s.startHTTPServer(ctx, httpAddr)
 	})
 
 	// graceful shutdown

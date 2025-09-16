@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -11,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (s *Server) startHTTPServer(ctx context.Context) error {
+func (s *Server) startHTTPServer(ctx context.Context, httpAddr string) error {
 	if s.Config.App.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -67,7 +66,7 @@ func (s *Server) startHTTPServer(ctx context.Context) error {
 	})
 
 	s.httpServer = &http.Server{
-		Addr:         fmt.Sprintf("%s:%s", s.Config.HTTP.Host, s.Config.HTTP.Port),
+		Addr:         httpAddr,
 		Handler:      router,
 		ReadTimeout:  s.Config.HTTP.ReadTimeout,
 		WriteTimeout: s.Config.HTTP.WriteTimeout,
@@ -95,25 +94,25 @@ func (s *Server) startHTTPServer(ctx context.Context) error {
 }
 
 func (s *Server) handleHTTPRegister(c *gin.Context) {
-    var req struct {
-        Email    string `json:"email"`
-        Password string `json:"password"`
-    }
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
 
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
-        return
-    }
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
 
-    resp, err := s.authHandler.Registration(c, &auth_pb.RegisterRequest{
-        Email:    req.Email,
-        Password: req.Password,
-    })
-    if err != nil {
-        s.Logger.Error("registration error", "error", err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "registration failed"})
-        return
-    }
+	resp, err := s.authHandler.Registration(c, &auth_pb.RegisterRequest{
+		Email:    req.Email,
+		Password: req.Password,
+	})
+	if err != nil {
+		s.Logger.Error("registration error", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "registration failed"})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": resp.Message})
+	c.JSON(http.StatusOK, gin.H{"message": resp.Message})
 }
