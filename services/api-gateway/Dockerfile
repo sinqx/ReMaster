@@ -9,8 +9,9 @@
     
     # Build the binary with optimizations
     RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-        go build -ldflags="-w -s -X main.Version=$(git describe --tags --always --dirty) \
-        -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S')" \
+        go build -ldflags="-w -s \
+            -X main.Version=$VERSION \
+            -X main.BuildTime=$BUILD_TIME" \
         -a -installsuffix cgo \
         -o /app/gateway-server \
         ./services/api-gateway/main.go
