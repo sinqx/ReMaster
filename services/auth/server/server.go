@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,13 +22,13 @@ import (
 )
 
 type Server struct {
+	Name        string
 	authHandler *handlers.AuthHandler
 	Config      *cfg.Config
 
 	MongoManager *connection.MongoManager
 	RedisManager *connection.RedisManager
 
-	httpServer *http.Server
 	grpcServer *grpc.Server
 
 	// v      *errors.Validator
@@ -37,13 +36,15 @@ type Server struct {
 }
 
 func NewServer(config *cfg.Config, logger *slog.Logger, mongoMgr *connection.MongoManager, redisMgr *connection.RedisManager) *Server {
+	name := "auth"
 	jwtUtils := utils.NewJWTUtils(&config.JWT)
 	googleAuthClient := oauth.NewGoogleAuthClient(&config.OAuth)
 	authRepo := repositories.NewAuthRepository(mongoMgr.GetDatabase(), logger)
 	authService := services.NewAuthService(*authRepo, redisMgr, googleAuthClient, jwtUtils)
 	authHandler := handlers.NewAuthHandler(authService, logger)
-	logger = logger.With(slog.String("service", "auth"))
+	logger = logger.With(slog.String("service", name))
 	return &Server{
+		Name:         name,
 		Config:       config,
 		Logger:       logger,
 		MongoManager: mongoMgr,
@@ -56,7 +57,7 @@ func (s *Server) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(context.Background())
 
-	grpcAddr, err := s.Config.GetServiceGRPCAddr("auth")
+	grpcAddr, err := s.Config.GetServiceGRPCAddr(s.Name)
 	if err != nil {
 		s.Logger.Error("failed to get auth service address", "error", err)
 		cancel()
@@ -69,52 +70,41 @@ func (s *Server) Start() error {
 		return s.startGRPCServer(ctx, grpcAddr)
 	})
 
-	httpAddr, err := s.Config.GetServiceHTTPAddr("auth")
-	if err != nil {
-		s.Logger.Error("failed to get auth service address", "error", err)
-		return fmt.Errorf("failed to get auth service HTTP address: %w", err)
-	}
-	//  HTTP
-	g.Go(func() error {
-		s.Logger.Info("HTTP server starting", "Address", httpAddr)
-		return s.startHTTPServer(ctx, httpAddr)
-	})
-
 	// graceful shutdown
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	go s.shutdown(ctx, cancel, g)
 
-	select {
-	case <-stop:
-		s.Logger.Info("shutting down server due to OS signal")
-		cancel()
-	case <-ctx.Done():
-		s.Logger.Info("shutting down server due to context cancellation")
-	}
-
-	s.shutdown()
-	done := make(chan struct{})
-	go func() {
-		g.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		s.Logger.Info("server shutdown completed")
-	case <-time.After(s.Config.HTTP.ShutdownTimeout):
-		s.Logger.Warn("server shutdown timed out, forcing exit")
-	}
-
-	cancel()
-	return nil
+	return g.Wait()
 }
 
-func (s *Server) shutdown() {
-	s.Logger.Info("Cleaning up resources...")
+func (s *Server) shutdown(ctx context.Context, cancel context.CancelFunc, g *errgroup.Group) error {
+	// Setup signal handling
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	ctx, cancel := context.WithTimeout(context.Background(), s.Config.HTTP.ShutdownTimeout)
-	defer cancel()
+	select {
+	case sig := <-sigChan:
+		s.Logger.Info("Received shutdown signal", "signal", sig.String())
+		cancel()
+	case <-ctx.Done():
+		s.Logger.Info("Context cancelled")
+	}
+
+	s.Logger.Info("Cleaning up resources...")
+	if s.grpcServer != nil {
+		stopped := make(chan struct{})
+		go func() {
+			s.grpcServer.GracefulStop()
+			close(stopped)
+		}()
+
+		select {
+		case <-stopped:
+			s.Logger.Info("gRPC server stopped")
+		case <-time.After(s.Config.HTTP.ShutdownTimeout):
+			s.Logger.Warn("gRPC server shutdown timed out, forcing stop")
+			s.grpcServer.Stop()
+		}
+	}
 
 	if s.MongoManager != nil {
 		if err := s.MongoManager.Disconnect(ctx); err != nil {
@@ -131,4 +121,24 @@ func (s *Server) shutdown() {
 			s.Logger.Info("Redis connection closed")
 		}
 	}
+
+	// Wait for all goroutines with timeout
+	done := make(chan error, 1)
+	go func() {
+		done <- g.Wait()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil && err != context.Canceled {
+			s.Logger.Error("Error during shutdown", "error", err)
+			return err
+		}
+		s.Logger.Info("Graceful shutdown completed")
+	case <-time.After(s.Config.HTTP.ShutdownTimeout):
+		s.Logger.Error("Shutdown timeout exceeded, forcing exit")
+		return fmt.Errorf("shutdown timeout after %v", s.Config.HTTP.ShutdownTimeout)
+	}
+
+	return nil
 }

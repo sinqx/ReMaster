@@ -38,7 +38,8 @@ services:
       dockerfile: services/api-gateway/Dockerfile
     container_name: masters-api-gateway
     depends_on:
-      - auth-service
+      auth-service:
+        condition: service_healthy
     ports:
       - 8080:8080
     env_file:
@@ -62,7 +63,6 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - 8081:8080 # HTTP
       - 9091:9090 # gRPC
     env_file:
       - ../../.env
@@ -74,10 +74,11 @@ services:
       - masters-network
     restart: unless-stopped
     healthcheck:
-      test: [CMD, curl, -f, http://localhost:8080/health]
-      interval: 30s
-      timeout: 10s
+      test: [CMD, nc, -z, localhost, "9090"]
+      interval: 10s
+      timeout: 5s
       retries: 3
+      start_period: 10s
 
 networks:
   masters-network:
