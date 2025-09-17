@@ -107,6 +107,7 @@ type LogConfig struct {
 }
 
 type ServiceAddr struct {
+	Name     string `mapstructure:"name"`
 	Host     string `mapstructure:"host" validate:"required"`
 	GRPCPort string `mapstructure:"grpc_port" validate:"required"`
 	HTTPPort string `mapstructure:"http_port"`
@@ -311,22 +312,10 @@ func validateConfig(cfg *Config) error {
 	return nil
 }
 
-// address helpers
 func (c *Config) GetServiceGRPCAddr(name string) (string, error) {
 	svc, ok := c.Services[name]
 	if !ok {
 		return "", fmt.Errorf("service %s not found in config", name)
 	}
-	return fmt.Sprintf("%s:%s", svc.Host, svc.GRPCPort), nil
-}
-
-func (c *Config) GetServiceHTTPAddr(name string) (string, error) {
-	svc, ok := c.Services[name]
-	if !ok {
-		return "", fmt.Errorf("service %s not found in config", name)
-	}
-	if svc.HTTPPort == "" {
-		return "", fmt.Errorf("service %s has no http_port defined", name)
-	}
-	return fmt.Sprintf("%s:%s", svc.Host, svc.HTTPPort), nil
+	return fmt.Sprintf("%s:%s", c.GRPC.Host, svc.GRPCPort), nil
 }

@@ -58,6 +58,7 @@ type AuthRepositoryInterface interface {
 
 	// Utility
 	CreateIndexes(ctx context.Context) error
+	IsUniqueConstraintError(err error) bool
 }
 
 func (r *AuthRepository) Create(ctx context.Context, user *models.User) error {
@@ -101,7 +102,7 @@ func (r *AuthRepository) SaveRefreshToken(ctx context.Context, token *models.Ref
 	return err
 }
 
-func isUniqueConstraintError(err error) bool {
+func (r *AuthRepository) IsUniqueConstraintError(err error) bool {
 	if writeException, ok := err.(mongo.WriteException); ok {
 		for _, writeError := range writeException.WriteErrors {
 			if writeError.Code == 11000 { // 11000 - duplication error code MongoDB

@@ -3,12 +3,14 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 
 	mw "remaster/services/api-gateway/middleware"
-	models "remaster/services/api-gateway/models"
+	m "remaster/services/api-gateway/models"
 	auth_pb "remaster/shared/proto/auth"
 
 	"github.com/gin-gonic/gin"
+	"google.golang.org/grpc/status"
 )
 
 type AuthHandler struct {
@@ -24,25 +26,32 @@ func NewAuthHandler(client auth_pb.AuthServiceClient, logger *slog.Logger) *Auth
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
-	var req auth_pb.RegisterRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{
-			Error:   err.Error(),
-			Success: false,
-		})
+	var dto m.RegisterDTO
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	resp, err := h.client.Registration(c, &auth_pb.RegisterRequest{
-		Email:     req.Email,
-		Password:  req.Password,
-		FirstName: req.FirstName,
-		LastName:  req.LastName,
-		UserType:  req.UserType,
+		Email:     dto.Email,
+		Password:  dto.Password,
+		FirstName: dto.FirstName,
+		LastName:  dto.LastName,
+		Phone:     dto.Phone,
+		UserType:  dto.UserType,
 	})
 
+	switch e := status.Convert(err).Message(); {
+	case strings.Contains(e, "must be"):
+		c.JSON(http.StatusBadRequest, gin.H{"error": e})
+	case strings.Contains(e, "already exists"):
+		c.JSON(http.StatusConflict, gin.H{"error": e})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	}
+
 	if err != nil {
-		h.logger.Error("registration failed", "error", err, "email", req.Email)
+		h.logger.Error("1registration failed", "error", err, "email", dto.Email)
 		mw.HandleGRPCError(c, err, h.logger)
 		return
 	}

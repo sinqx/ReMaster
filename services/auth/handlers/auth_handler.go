@@ -43,10 +43,10 @@ func (c *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest)
 
 	resp, err := c.authService.CreateUser(ctx, registerReq, metadata)
 	if err != nil {
-		c.logger.Error("Registration failed", "error", err)
+		c.logger.Error("2Registration failed", "error", err)
 		return &pb.RegisterResponse{
 			Success: false,
-			Message: "Registration failed",
+			Message: "3Registration failed",
 		}, err
 	}
 
@@ -57,7 +57,7 @@ func (c *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest)
 		AccessToken:  resp.AccessToken,
 		RefreshToken: resp.RefreshToken,
 		ExpiresAt:    resp.ExpiresAt,
-		UserType:     pb.UserType(pb.UserType_value[string(resp.User.UserType)]),
+		UserType:     string(resp.User.UserType),
 		IsActive:     resp.User.IsActive,
 		IsVerified:   resp.User.IsVerified,
 		CreatedAt:    timestamppb.New(resp.User.CreatedAt),

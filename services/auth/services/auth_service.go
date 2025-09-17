@@ -31,6 +31,18 @@ type AuthService struct {
 	jwtUtils    *utils.JWTUtils
 }
 
+type ValidationError struct {
+	Msg string
+}
+
+func (e *ValidationError) Error() string { return e.Msg }
+
+type ConflictError struct {
+	Msg string
+}
+
+func (e *ConflictError) Error() string { return e.Msg }
+
 func NewAuthService(
 	userRepo repositories.AuthRepository,
 	redisMgr *conn.RedisManager,
@@ -53,15 +65,15 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 	// s.logger.Info("Registering user", "email", req.Email)
 
 	if err := req.ValidateRegisterRequest(); err != nil {
-		return nil, err // NewValidationError(err.Error())
+		return nil, &ValidationError{Msg: err.Error()}
 	}
 
 	existingUser, err := s.repo.GetByEmail(ctx, req.Email)
 	if err != nil && err != mongo.ErrNoDocuments {
-		return nil, err // fmt.Errorf("error checking user existence: %w", err)
+		return nil, fmt.Errorf("error checking user existence: %w", err)
 	}
 	if existingUser != nil {
-		return nil, err //NewConflictError("user with this email already exists")
+		return nil, &ConflictError{Msg: "user with this email already exists"}
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), BcryptCost)
@@ -79,7 +91,9 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 	}
 
 	if err := s.repo.Create(ctx, user); err != nil {
-		// if s.repo.IsUniqueConstraintError(err)
+		if s.repo.IsUniqueConstraintError(err) {
+			return nil, &ConflictError{Msg: "user with this email already exists"}
+		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -97,7 +111,7 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 		Token:     refreshToken,
 		ExpiresAt: time.Now().Add(s.jwtConfig.RefreshTokenTTL),
 		CreatedAt: time.Now(),
-		IsRevoked: false, // Новый токен не может быть отозван
+		IsRevoked: false,
 		DeviceID:  metadata.DeviceID,
 		UserAgent: metadata.UserAgent,
 		IP:        metadata.IPAddress,
