@@ -7,12 +7,10 @@ import (
 
 	"remaster/services/auth/models"
 	oauth "remaster/services/auth/oAuth"
-	"remaster/services/auth/repositories"
+	repo "remaster/services/auth/repositories"
 	"remaster/services/auth/utils"
-	config "remaster/shared"
 	conn "remaster/shared/connection"
 
-	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -23,31 +21,19 @@ const (
 )
 
 type AuthService struct {
-	repo        repositories.AuthRepository
-	redisMgr    *conn.RedisManager
-	googleAuth  *oauth.GoogleAuthClient
-	oauthConfig *config.OAuthConfig
-	jwtConfig   *config.JWTConfig
-	jwtUtils    *utils.JWTUtils
+	repo       repo.AuthRepositoryInterface
+	redisMgr   *conn.RedisManager
+	googleAuth *oauth.GoogleAuthClient
+	// oauthConfig *config.OAuthConfig
+	jwtUtils *utils.JWTUtils
 }
-
-type ValidationError struct {
-	Msg string
-}
-
-func (e *ValidationError) Error() string { return e.Msg }
-
-type ConflictError struct {
-	Msg string
-}
-
-func (e *ConflictError) Error() string { return e.Msg }
 
 func NewAuthService(
-	userRepo repositories.AuthRepository,
+	userRepo repo.AuthRepositoryInterface,
 	redisMgr *conn.RedisManager,
 	googleAuth *oauth.GoogleAuthClient,
 	jwtUtils *utils.JWTUtils,
+
 ) *AuthService {
 	return &AuthService{
 		repo:       userRepo,
@@ -62,16 +48,11 @@ type AuthServiceInterface interface {
 }
 
 func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterRequest, metadata *models.RequestMetadata) (*models.AuthResponse, error) {
-	// s.logger.Info("Registering user", "email", req.Email)
-
 	if err := req.ValidateRegisterRequest(); err != nil {
 		return nil, &ValidationError{Msg: err.Error()}
 	}
 
-	existingUser, err := s.repo.GetByEmail(ctx, req.Email)
-	if err != nil && err != mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("error checking user existence: %w", err)
-	}
+	existingUser, _ := s.repo.GetByEmail(ctx, req.Email)
 	if existingUser != nil {
 		return nil, &ConflictError{Msg: "user with this email already exists"}
 	}
@@ -109,7 +90,7 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 	tokenModel := &models.RefreshToken{
 		UserID:    user.ID,
 		Token:     refreshToken,
-		ExpiresAt: time.Now().Add(s.jwtConfig.RefreshTokenTTL),
+		ExpiresAt: time.Now().Add(s.jwtUtils.RefreshTokenTTL),
 		CreatedAt: time.Now(),
 		IsRevoked: false,
 		DeviceID:  metadata.DeviceID,
@@ -128,7 +109,19 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 		User:         user.ToResponse(),
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		ExpiresAt:    time.Now().Add(s.jwtConfig.AccessTokenTTL).Unix(),
+		ExpiresAt:    time.Now().Add(s.jwtUtils.AccessTokenTTL).Unix(),
 		TokenType:    "Bearer",
 	}, nil
 }
+
+type ValidationError struct {
+	Msg string
+}
+
+func (e *ValidationError) Error() string { return e.Msg }
+
+type ConflictError struct {
+	Msg string
+}
+
+func (e *ConflictError) Error() string { return e.Msg }

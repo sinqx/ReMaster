@@ -2,9 +2,9 @@ package repositories
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	models "remaster/services/auth/models"
 
@@ -13,101 +13,111 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// TODO: refactor errors
-const (
-	UsersCollection         = "users"
-	RefreshTokensCollection = "refresh_tokens"
-	LoginAttemptsCollection = "login_attempts"
-)
-
-type AuthRepository struct {
-	collection              *mongo.Collection
-	refreshTokensCollection *mongo.Collection
-	logger                  *slog.Logger
+type authRepositoryImpl struct {
+	usersCol         *mongo.Collection
+	refreshTokensCol *mongo.Collection
+	loginAttemptsCol *mongo.Collection
+	logger           *slog.Logger
 }
 
-func NewAuthRepository(db *mongo.Database, logger *slog.Logger) *AuthRepository {
-	return &AuthRepository{
-		collection:              db.Collection("users"),
-		refreshTokensCollection: db.Collection("refresh_tokens"),
-		logger:                  logger.With(slog.String("repository", "auth")),
+func NewAuthRepository(db *mongo.Database, logger *slog.Logger) *authRepositoryImpl {
+	return &authRepositoryImpl{
+		usersCol:         db.Collection("users"),
+		refreshTokensCol: db.Collection("refresh_tokens"),
+		loginAttemptsCol: db.Collection("login_attempts"),
+		logger:           logger.With(slog.String("repository", "auth")),
 	}
 }
 
 type AuthRepositoryInterface interface {
 	// User operations
-	CreateUser(ctx context.Context, user *models.User) error
-	GetByID(ctx context.Context, id string) (*models.User, error)
+	Create(ctx context.Context, user *models.User) error
+	// GetByID(ctx context.Context, id string) (*models.User, error)
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
-	GetByGoogleID(ctx context.Context, googleID string) (*models.User, error)
-	Update(ctx context.Context, user *models.User) error
-	UpdatePassword(ctx context.Context, userID, hashedPassword string) error
-	UpdateLoginAttempts(ctx context.Context, userID string, attempts int) error
-	UpdateLastLogin(ctx context.Context, userID, ip string) error
 
 	// Refresh token operations
 	SaveRefreshToken(ctx context.Context, token *models.RefreshToken) error
-	GetRefreshToken(ctx context.Context, token string) (*models.RefreshToken, error)
-	RevokeRefreshToken(ctx context.Context, token string) error
-	RevokeAllUserRefreshTokens(ctx context.Context, userID string) error
-	CleanExpiredTokens(ctx context.Context) error
+	// GetRefreshToken(ctx context.Context, token string) (*models.RefreshToken, error)
+	// RevokeRefreshToken(ctx context.Context, token string) error
+	// RevokeAllUserRefreshTokens(ctx context.Context, userID string) error
+	// CleanExpiredTokens(ctx context.Context) error
 
 	// Login attempts
-	SaveLoginAttempt(ctx context.Context, attempt *models.LoginAttempt) error
-	GetLoginAttempts(ctx context.Context, email string, since time.Time) ([]*models.LoginAttempt, error)
+	// SaveLoginAttempt(ctx context.Context, attempt *models.LoginAttempt) error
+	// GetLoginAttempts(ctx context.Context, email string, since time.Time) ([]*models.LoginAttempt, error)
 
 	// Utility
-	CreateIndexes(ctx context.Context) error
+	EnsureIndexes(ctx context.Context) error
 	IsUniqueConstraintError(err error) bool
 }
 
-func (r *AuthRepository) Create(ctx context.Context, user *models.User) error {
-	user.BeforeCreate()
-
-	count, err := r.collection.CountDocuments(ctx, bson.M{"email": user.Email})
+func (r *authRepositoryImpl) EnsureIndexes(ctx context.Context) error {
+	// unique index on email
+	_, err := r.usersCol.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "email", Value: 1}},
+		Options: options.Index().SetUnique(true).SetName("idx_users_email_unique"),
+	})
 	if err != nil {
-		return fmt.Errorf("failed to check email uniqueness: %w", err)
+		return fmt.Errorf("create users.email index: %w", err)
 	}
 
-	if count > 0 {
-		return fmt.Errorf("user with email %s already exists", user.Email)
-	}
-
-	_, err = r.collection.InsertOne(ctx, user)
-	if err != nil {
-		return fmt.Errorf("failed to create user: %w", err)
-	}
+	// add other indexes if needed
 	return nil
 }
 
-func (r *AuthRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
-	var user models.User
-	err := r.collection.FindOne(ctx, bson.M{"email": email}).Decode(&user)
+func (r *authRepositoryImpl) Create(ctx context.Context, user *models.User) error {
+	user.BeforeCreate()
+
+	_, err := r.usersCol.InsertOne(ctx, user)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("user not found")
+		if r.IsUniqueConstraintError(err) {
+			return fmt.Errorf("user with email %s already exists: %w", user.Email, err)
+		}
+		return fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return nil
+}
+
+func (r *authRepositoryImpl) GetByEmail(ctx context.Context, email string) (*models.User, error) {
+	var u models.User
+	err := r.usersCol.FindOne(ctx, bson.M{"email": email}).Decode(&u)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, mongo.ErrNoDocuments
 		}
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
-
-	return &user, nil
+	return &u, nil
 }
 
-func (r *AuthRepository) SaveRefreshToken(ctx context.Context, token *models.RefreshToken) error {
+func (r *authRepositoryImpl) SaveRefreshToken(ctx context.Context, token *models.RefreshToken) error {
 	opts := options.Update().SetUpsert(true)
 	filter := bson.M{"user_id": token.UserID}
 	update := bson.M{"$set": token}
 
-	_, err := r.refreshTokensCollection.UpdateOne(ctx, filter, update, opts)
-	return err
+	_, err := r.refreshTokensCol.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return fmt.Errorf("failed to save refresh token: %w", err)
+	}
+	return nil
 }
 
-func (r *AuthRepository) IsUniqueConstraintError(err error) bool {
-	if writeException, ok := err.(mongo.WriteException); ok {
-		for _, writeError := range writeException.WriteErrors {
-			if writeError.Code == 11000 { // 11000 - duplication error code MongoDB
+func (r *authRepositoryImpl) IsUniqueConstraintError(err error) bool {
+	var we mongo.WriteException
+	if errors.As(err, &we) {
+		for _, e := range we.WriteErrors {
+			// 11000 is duplicate key
+			if e.Code == 11000 {
 				return true
 			}
+		}
+	}
+	// some drivers may return CommandError
+	var ce mongo.CommandError
+	if errors.As(err, &ce) {
+		if ce.Code == 11000 {
+			return true
 		}
 	}
 	return false
