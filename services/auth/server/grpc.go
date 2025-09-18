@@ -2,39 +2,41 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"time"
 
 	auth_pb "remaster/shared/proto/auth"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/reflection"
 )
 
 func (s *Server) startGRPCServer(ctx context.Context, grpcAddr string) error {
-	// Create a TCP listener on the specified address
+	s.Logger.Info("gRPC server starting", "Address", grpcAddr)
+
+	// Create TCP listener
 	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
-		s.Logger.Error("failed to create gRPC listener", "address", grpcAddr, "error", err)
-		return err
+		s.Logger.Error("Failed to create gRPC listener", "address", grpcAddr, "error", err)
+		return fmt.Errorf("failed to create listener: %w", err)
 	}
 	s.Logger.Info("gRPC listener created", "address", grpcAddr)
 
-	// Set gRPC server options
+	// Configure gRPC server options
 	opts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(s.Config.GRPC.MaxReceiveSize),
 		grpc.MaxSendMsgSize(s.Config.GRPC.MaxSendSize),
-		grpc.UnaryInterceptor(s.loggingInterceptor()),
 	}
 	s.grpcServer = grpc.NewServer(opts...)
 
-	// Register the Auth service with the gRPC server
+	// Register Auth service
 	auth_pb.RegisterAuthServiceServer(s.grpcServer, s.authHandler)
 	s.Logger.Info("Auth service registered on gRPC server")
 
-	// Enable health check service if configured
+	// Register health check service
 	if s.Config.GRPC.EnableHealthCheck {
 		healthServer := health.NewServer()
 		healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
@@ -42,7 +44,7 @@ func (s *Server) startGRPCServer(ctx context.Context, grpcAddr string) error {
 		s.Logger.Info("gRPC health check service registered")
 	}
 
-	// Enable reflection service if configured
+	// Register reflection service for development
 	if s.Config.GRPC.EnableReflection {
 		reflection.Register(s.grpcServer)
 		s.Logger.Info("gRPC reflection service registered")
@@ -51,46 +53,39 @@ func (s *Server) startGRPCServer(ctx context.Context, grpcAddr string) error {
 	// Handle graceful shutdown
 	go func() {
 		<-ctx.Done()
-		s.Logger.Info("Graceful shutdown signal received, stopping gRPC server...")
-		s.grpcServer.GracefulStop()
-		s.Logger.Info("gRPC server stopped gracefully")
+		s.Logger.Info("Graceful shutdown initiated, stopping gRPC server...")
+
+		// Allow 30 seconds for graceful shutdown
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		done := make(chan struct{})
+		go func() {
+			s.grpcServer.GracefulStop()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			s.Logger.Info("gRPC server stopped gracefully")
+		case <-shutdownCtx.Done():
+			s.Logger.Warn("Graceful shutdown timeout, forcing stop")
+			s.grpcServer.Stop()
+		}
 	}()
 
-	// Start serving gRPC requests
 	s.Logger.Info("gRPC server starting to listen")
+
+	// Start the server
 	if err := s.grpcServer.Serve(lis); err != nil {
-		s.Logger.Error("gRPC server failed to serve", "error", err)
+		// If the server was stopped intentionally, this is not an error
 		if err == grpc.ErrServerStopped {
 			s.Logger.Info("gRPC server was stopped intentionally")
 			return nil
 		}
-		return err
+		s.Logger.Error("gRPC server failed to serve", "error", err)
+		return fmt.Errorf("gRPC server failed: %w", err)
 	}
-	s.Logger.Info("gRPC server successfully listening on", "address", lis.Addr().String())
 
 	return nil
-}
-
-func (s *Server) loggingInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		peer, ok := peer.FromContext(ctx)
-		if ok {
-			s.Logger.Info("Incoming gRPC request",
-				"method", info.FullMethod,
-				"peer", peer.Addr.String())
-		}
-
-		resp, err := handler(ctx, req)
-
-		if err != nil {
-			s.Logger.Error("gRPC request failed",
-				"method", info.FullMethod,
-				"error", err)
-		} else {
-			s.Logger.Debug("gRPC request completed",
-				"method", info.FullMethod)
-		}
-
-		return resp, err
-	}
 }
