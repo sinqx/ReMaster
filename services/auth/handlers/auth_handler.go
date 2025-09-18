@@ -43,7 +43,7 @@ func (c *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest)
 
 	resp, err := c.authService.CreateUser(ctx, registerReq, metadata)
 	if err != nil {
-		c.logger.Error("2Registration failed", "error", err)
+		c.logger.Error("Registration failed", "error", err)
 		return &pb.RegisterResponse{
 			Success: false,
 			Message: "3Registration failed",
