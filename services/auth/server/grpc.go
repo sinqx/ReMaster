@@ -15,7 +15,6 @@ import (
 
 func (s *Server) startGRPCServer(ctx context.Context, grpcAddr string) error {
 	// Create a TCP listener on the specified address
-	grpcAddr = "0.0.0.0:9090"
 	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		s.Logger.Error("failed to create gRPC listener", "address", grpcAddr, "error", err)
@@ -73,7 +72,7 @@ func (s *Server) startGRPCServer(ctx context.Context, grpcAddr string) error {
 }
 
 func (s *Server) loggingInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		peer, ok := peer.FromContext(ctx)
 		if ok {
 			s.Logger.Info("Incoming gRPC request",

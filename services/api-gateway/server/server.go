@@ -14,8 +14,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 
 	cfg "remaster/shared"
 	auth_pb "remaster/shared/proto/auth"
@@ -88,11 +89,10 @@ func (s *Server) initializeGRPCClients() error {
 	}
 
 	for _, service := range services {
-		// address, err := s.Config.GetServiceGRPCAddr(service.name)
-		address := "auth-service:9090"
-		// if err != nil {
-		// 	return fmt.Errorf("failed to get auth service address: %w", err)
-		// }
+		address, err := s.Config.GetServiceGRPCAddr(service.name)
+		if err != nil {
+			return fmt.Errorf("failed to get auth service address: %w", err)
+		}
 		s.Logger.Info("Connecting to GRPC service",
 			"service", service.name,
 			"address", address,
@@ -134,37 +134,37 @@ func (s *Server) connectToService(serviceName, address string) (*grpc.ClientConn
 	s.Logger.Info("Connecting to gRPC service",
 		"service", serviceName,
 		"address", address)
+
 	// Create connection with retry interceptor
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff: backoff.Config{
+				BaseDelay:  1.0 * time.Second,
+				Multiplier: 1.6,
+				Jitter:     0.2,
+				MaxDelay:   120 * time.Second,
+			},
+			MinConnectTimeout: 5 * time.Second,
+		}),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                10 * time.Second,
+			Timeout:             3 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	)
 	if err != nil {
-		s.Logger.Error("failed to connect to service",
+		s.Logger.Error("failed to create gRPC client",
 			"service", serviceName,
 			"address", address,
 			"error", err)
 		return nil, err
 	}
 
-	// Wait for connection to be ready
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+	s.Logger.Info("gRPC client created",
+		"service", serviceName,
+		"state", conn.GetState().String())
 
-	for {
-		state := conn.GetState()
-		s.Logger.Info("Connection state", "service", serviceName, "state", state.String())
-		if state == connectivity.Ready {
-			s.Logger.Info("Connection ready", "service", serviceName)
-			break
-		}
-		if state == connectivity.TransientFailure || state == connectivity.Shutdown {
-			conn.Close()
-			return nil, fmt.Errorf("connection failed for service %s with state %s", serviceName, state)
-		}
-		if !conn.WaitForStateChange(ctx, state) {
-			conn.Close()
-			return nil, fmt.Errorf("connection timeout for service %s", serviceName)
-		}
-	}
-	s.Logger.Info("Connection to service established", "service", serviceName, "state", conn.GetState().String())
 	return conn, nil
 }
 

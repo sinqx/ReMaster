@@ -317,5 +317,5 @@ func (c *Config) GetServiceGRPCAddr(name string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("service %s not found in config", name)
 	}
-	return fmt.Sprintf("%s:%s", c.GRPC.Host, svc.GRPCPort), nil
+	return fmt.Sprintf("%s:%s", svc.Host, svc.GRPCPort), nil
 }

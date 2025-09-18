@@ -73,4 +73,4 @@ log:
 services:
   auth:
     host: auth-service
-    grpc_port: 9090
+    grpc_port: 9091
