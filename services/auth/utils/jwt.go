@@ -19,15 +19,15 @@ type CustomClaims struct {
 
 type JWTUtils struct {
 	secretKey       string
-	accessTokenTTL  time.Duration
-	refreshTokenTTL time.Duration
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
 }
 
 func NewJWTUtils(jwtConfig *config.JWTConfig) *JWTUtils {
 	return &JWTUtils{
 		secretKey:       jwtConfig.SecretKey,
-		accessTokenTTL:  jwtConfig.AccessTokenTTL,
-		refreshTokenTTL: jwtConfig.RefreshTokenTTL,
+		AccessTokenTTL:  jwtConfig.AccessTokenTTL,
+		RefreshTokenTTL: jwtConfig.RefreshTokenTTL,
 	}
 }
 
@@ -37,7 +37,7 @@ func (j *JWTUtils) GenerateAccessToken(userID, email, userType string) (string, 
 		Email:    email,
 		UserType: userType,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(j.accessTokenTTL)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(j.AccessTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
