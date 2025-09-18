@@ -8,7 +8,9 @@
     COPY . .
 
     # Build the binary with optimizations
-    RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    RUN --mount=type=cache,target=/root/.cache/go-build \
+        --mount=type=cache,target=/go/pkg/mod \
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
         go build -ldflags="-w -s \
             -X main.Version=$VERSION \
             -X main.BuildTime=$BUILD_TIME" \
