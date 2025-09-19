@@ -18,7 +18,7 @@ func main() {
 	}
 
 	logger := logger.New(cfg.Log)
-	logger.Info("Starting Auth micro-service", "log_level", cfg.Log.Level)
+	logger.Info("Starting Auth micro-service")
 
 	// dependencies initialization
 	mongoMgr := connection.NewMongoManager(&cfg.Mongo)

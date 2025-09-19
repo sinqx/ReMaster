@@ -48,7 +48,7 @@ func (s *Server) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s.Logger.Info("Starting API Gateway server",
+	s.Logger.Info("Creating API Gateway server",
 		"environment", s.Config.App.Environment,
 		"http_port", s.Config.HTTP.Port,
 	)
@@ -69,7 +69,7 @@ func (s *Server) Start() error {
 		return s.runHTTPServer(ctx)
 	})
 
-	go s.shutdown(ctx, cancel, g)
+	go s.shutdown(ctx, cancel)
 
 	return g.Wait()
 }
@@ -93,10 +93,6 @@ func (s *Server) initializeGRPCClients() error {
 		if err != nil {
 			return fmt.Errorf("failed to get auth service address: %w", err)
 		}
-		s.Logger.Info("Connecting to GRPC service",
-			"service", service.name,
-			"address", address,
-		)
 
 		conn, err := s.connectToService(service.name, address)
 		if err != nil {
@@ -203,7 +199,7 @@ func (s *Server) runHTTPServer(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) shutdown(ctx context.Context, cancel context.CancelFunc, g *errgroup.Group) error {
+func (s *Server) shutdown(ctx context.Context, cancel context.CancelFunc) error {
 	// Setup signal handling
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -236,23 +232,6 @@ func (s *Server) shutdown(ctx context.Context, cancel context.CancelFunc, g *err
 	}
 	s.connMutex.Unlock()
 
-	// Wait for all goroutines with timeout
-	done := make(chan error, 1)
-	go func() {
-		done <- g.Wait()
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil && err != context.Canceled {
-			s.Logger.Error("Error during shutdown", "error", err)
-			return err
-		}
-		s.Logger.Info("Graceful shutdown completed")
-	case <-time.After(s.Config.HTTP.ShutdownTimeout):
-		s.Logger.Error("Shutdown timeout exceeded, forcing exit")
-		return fmt.Errorf("shutdown timeout after %v", s.Config.HTTP.ShutdownTimeout)
-	}
-
+	s.Logger.Info("Graceful shutdown completed")
 	return nil
 }

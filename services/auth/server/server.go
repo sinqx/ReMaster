@@ -69,7 +69,12 @@ func (s *Server) Start() error {
 		return fmt.Errorf("failed to get gRPC address: %w", err)
 	}
 
-	s.Logger.Info("Starting Auth micro-service", "service", s.Name, "grpc_address", grpcAddr)
+	s.Logger.Info("Created API Gateway server",
+		"environment", s.Config.App.Environment,
+		"http_port", s.Config.HTTP.Port,
+	)
+
+	s.Logger.Info("Creating server for", "service", s.Name, "grpc_address", grpcAddr)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -81,19 +86,17 @@ func (s *Server) Start() error {
 	})
 
 	g.Go(func() error {
-		return s.handleShutdown(ctx, cancel, g)
+		return s.handleShutdown(ctx, cancel)
 	})
 
 	if err := g.Wait(); err != nil {
 		s.Logger.Error("Server stopped with error", "error", err)
 		return err
 	}
-
-	s.Logger.Info("Server stopped successfully")
 	return nil
 }
 
-func (s *Server) handleShutdown(ctx context.Context, cancel context.CancelFunc, g *errgroup.Group) error {
+func (s *Server) handleShutdown(ctx context.Context, cancel context.CancelFunc) error {
 	// Setup signal handling
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -113,14 +116,6 @@ func (s *Server) handleShutdown(ctx context.Context, cancel context.CancelFunc, 
 			s.grpcServer.GracefulStop()
 			close(stopped)
 		}()
-
-		select {
-		case <-stopped:
-			s.Logger.Info("gRPC server stopped")
-		case <-time.After(s.Config.HTTP.ShutdownTimeout):
-			s.Logger.Warn("gRPC server shutdown timed out, forcing stop")
-			s.grpcServer.Stop()
-		}
 	}
 
 	if s.MongoManager != nil {
@@ -139,23 +134,6 @@ func (s *Server) handleShutdown(ctx context.Context, cancel context.CancelFunc, 
 		}
 	}
 
-	// Wait for all goroutines with timeout
-	done := make(chan error, 1)
-	go func() {
-		done <- g.Wait()
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil && err != context.Canceled {
-			s.Logger.Error("Error during shutdown", "error", err)
-			return err
-		}
-		s.Logger.Info("Graceful shutdown completed")
-	case <-time.After(s.Config.HTTP.ShutdownTimeout):
-		s.Logger.Error("Shutdown timeout exceeded, forcing exit")
-		return fmt.Errorf("shutdown timeout after %v", s.Config.HTTP.ShutdownTimeout)
-	}
-
+	s.Logger.Info("Graceful shutdown completed")
 	return nil
 }

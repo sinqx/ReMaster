@@ -16,7 +16,7 @@ func main() {
 	}
 
 	logger := logger.New(cfg.Log)
-	logger.Info("Starting API Gateway", "log_level", cfg.Log.Level)
+	logger.Info("Starting API Gateway")
 
 	srv := server.NewServer(cfg, logger)
 	if err := srv.Start(); err != nil {

@@ -23,7 +23,6 @@ func (s *Server) startGRPCServer(ctx context.Context, grpcAddr string) error {
 		s.Logger.Error("Failed to create gRPC listener", "address", grpcAddr, "error", err)
 		return fmt.Errorf("failed to create listener: %w", err)
 	}
-	s.Logger.Info("gRPC listener created", "address", grpcAddr)
 
 	// Configure gRPC server options
 	opts := []grpc.ServerOption{
