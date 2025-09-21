@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	models "remaster/services/auth/models"
+	et "remaster/shared/errors"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -61,7 +62,6 @@ func (r *authRepositoryImpl) EnsureIndexes(ctx context.Context) error {
 		return fmt.Errorf("create users.email index: %w", err)
 	}
 
-	// add other indexes if needed
 	return nil
 }
 
@@ -71,9 +71,9 @@ func (r *authRepositoryImpl) Create(ctx context.Context, user *models.User) erro
 	_, err := r.usersCol.InsertOne(ctx, user)
 	if err != nil {
 		if r.IsUniqueConstraintError(err) {
-			return fmt.Errorf("user with email %s already exists: %w", user.Email, err)
+			return et.NewConflictError(fmt.Sprintf("user with email %s already exists", user.Email), err)
 		}
-		return fmt.Errorf("failed to create user: %w", err)
+		return et.NewDatabaseError("failed to create user", err)
 	}
 
 	return nil
