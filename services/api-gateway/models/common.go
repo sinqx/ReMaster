@@ -1,15 +1,10 @@
 package models
 
-type ErrorResponse struct {
-	Error   string `json:"error"`
-	Code    string `json:"code,omitempty"`
+type Envelope struct {
 	Success bool   `json:"success"`
-}
-
-type SuccessResponse struct {
 	Message string `json:"message,omitempty"`
+	Code    string `json:"code,omitempty"`
 	Data    any    `json:"data,omitempty"`
-	Success bool   `json:"success"`
 }
 
 type RegisterDTO struct {
