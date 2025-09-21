@@ -1,19 +1,20 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"os"
 	"remaster/services/api-gateway/models"
+	err "remaster/shared/errors"
 	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"github.com/redis/go-redis/v9"
 )
 
 func Recovery(logger *slog.Logger) gin.HandlerFunc {
@@ -52,8 +53,8 @@ func Recovery(logger *slog.Logger) gin.HandlerFunc {
 				)
 
 				if !c.Writer.Written() {
-					c.JSON(http.StatusInternalServerError, models.ErrorResponse{
-						Error:   "Internal server error",
+					c.JSON(http.StatusInternalServerError, models.Envelope{
+						Message: "Internal server error",
 						Success: false,
 					})
 				}
@@ -113,83 +114,47 @@ func CORS() gin.HandlerFunc {
 	}
 }
 
-func GRPCErrorHandler(logger *slog.Logger) gin.HandlerFunc {
+func ErrorMiddleware(eh *err.ErrorHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
-
 		if len(c.Errors) > 0 {
-			err := c.Errors.Last()
-			HandleGRPCError(c, err.Err, logger)
+			err := c.Errors.Last().Err
+			eh.HandleGinError(c, err)
 		}
 	}
 }
 
-func HandleGRPCError(c *gin.Context, err error, logger *slog.Logger) {
-	if c.Writer.Written() {
-		return
-	}
+func RateLimiter(rdb *redis.Client, limit int, window time.Duration) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := context.Background()
+		ip := c.ClientIP()
+		key := "ratelimit:" + ip
 
-	st, ok := status.FromError(err)
-	if !ok {
-		logger.Error("non-grpc error", "error", err)
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
-			Error:   "Internal server error",
-			Success: false,
-		})
-		return
-	}
+		count, err := rdb.Incr(ctx, key).Result()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Envelope{
+				Success: false,
+				Message: "Rate limiter error",
+				Code:    "INTERNAL_ERROR",
+			})
+			c.Abort()
+			return
+		}
 
-	httpStatus := grpcToHTTP(st.Code())
-	logger.Error("grpc error",
-		"code", st.Code(),
-		"message", st.Message(),
-		"path", c.Request.URL.Path,
-	)
+		if count == 1 {
+			rdb.Expire(ctx, key, window)
+		}
 
-	c.JSON(httpStatus, models.ErrorResponse{
-		Error:   st.Message(),
-		Code:    st.Code().String(),
-		Success: false,
-	})
-}
+		if int(count) > limit {
+			c.JSON(http.StatusTooManyRequests, models.Envelope{
+				Success: false,
+				Message: "Too many requests",
+				Code:    "RATE_LIMIT",
+			})
+			c.Abort()
+			return
+		}
 
-func grpcToHTTP(code codes.Code) int {
-	switch code {
-	case codes.OK:
-		return http.StatusOK
-	case codes.Canceled:
-		return http.StatusRequestTimeout
-	case codes.Unknown:
-		return http.StatusInternalServerError
-	case codes.InvalidArgument:
-		return http.StatusBadRequest
-	case codes.DeadlineExceeded:
-		return http.StatusGatewayTimeout
-	case codes.NotFound:
-		return http.StatusNotFound
-	case codes.AlreadyExists:
-		return http.StatusConflict
-	case codes.PermissionDenied:
-		return http.StatusForbidden
-	case codes.ResourceExhausted:
-		return http.StatusTooManyRequests
-	case codes.FailedPrecondition:
-		return http.StatusBadRequest
-	case codes.Aborted:
-		return http.StatusConflict
-	case codes.OutOfRange:
-		return http.StatusBadRequest
-	case codes.Unimplemented:
-		return http.StatusNotImplemented
-	case codes.Internal:
-		return http.StatusInternalServerError
-	case codes.Unavailable:
-		return http.StatusServiceUnavailable
-	case codes.DataLoss:
-		return http.StatusInternalServerError
-	case codes.Unauthenticated:
-		return http.StatusUnauthorized
-	default:
-		return http.StatusInternalServerError
+		c.Next()
 	}
 }
