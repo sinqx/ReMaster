@@ -18,8 +18,8 @@ func (s *Server) setupRoutes() {
 		middleware.Logger(s.Logger),
 		middleware.Recovery(s.Logger),
 		middleware.CORS(),
-		middleware.GRPCErrorHandler(s.Logger),
-		// middleware.RateLimiter(s.RedisManager),
+		// middleware.GRPCErrorHandler(s.Logger),
+		middleware.RateLimiter(s.RedisManager.GetClient(), 100, 1*time.Minute),
 	)
 
 	s.router.GET("/health", s.handleHealth)
