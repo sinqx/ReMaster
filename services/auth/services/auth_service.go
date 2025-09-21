@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,7 +11,10 @@ import (
 	repo "remaster/services/auth/repositories"
 	"remaster/services/auth/utils"
 	conn "remaster/shared/connection"
+	et "remaster/shared/errors"
 
+	"github.com/cenkalti/backoff/v4"
+	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -49,17 +53,21 @@ type AuthServiceInterface interface {
 
 func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterRequest, metadata *models.RequestMetadata) (*models.AuthResponse, error) {
 	if err := req.ValidateRegisterRequest(); err != nil {
-		return nil, &ValidationError{Msg: err.Error()}
+		return nil, et.NewValidationError("failed to validate register request",
+			map[string]string{"error": err.Error()}) // TODO: refactor after validation lib import
 	}
 
-	existingUser, _ := s.repo.GetByEmail(ctx, req.Email)
+	existingUser, err := s.repo.GetByEmail(ctx, req.Email)
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, et.NewDatabaseError("failed to check existing user", err)
+	}
 	if existingUser != nil {
-		return nil, &ConflictError{Msg: "user with this email already exists"}
+		return nil, et.NewConflictError("user with this email already exists", nil)
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), BcryptCost)
 	if err != nil {
-		return nil, fmt.Errorf("failed to hash password: %w", err)
+		return nil, et.NewInternalError("failed to hash password", err)
 	}
 
 	user := &models.User{
@@ -71,11 +79,15 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 		UserType:  req.UserType,
 	}
 
-	if err := s.repo.Create(ctx, user); err != nil {
-		if s.repo.IsUniqueConstraintError(err) {
-			return nil, &ConflictError{Msg: "user with this email already exists"}
+	err = backoff.Retry(func() error {
+		return s.repo.Create(ctx, user)
+	}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3))
+	if err != nil {
+		var conflictErr *et.ConflictError
+		if errors.As(err, &conflictErr) {
+			return nil, err
 		}
-		return nil, fmt.Errorf("failed to create user: %w", err)
+		return nil, fmt.Errorf("service: %w", err)
 	}
 
 	accessToken, err := s.jwtUtils.GenerateAccessToken(user.ID.Hex(), user.Email, string(user.UserType))
@@ -113,15 +125,3 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 		TokenType:    "Bearer",
 	}, nil
 }
-
-type ValidationError struct {
-	Msg string
-}
-
-func (e *ValidationError) Error() string { return e.Msg }
-
-type ConflictError struct {
-	Msg string
-}
-
-func (e *ConflictError) Error() string { return e.Msg }
