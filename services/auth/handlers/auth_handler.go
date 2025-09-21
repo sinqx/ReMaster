@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"remaster/shared/errors"
 	pb "remaster/shared/proto/auth"
 
 	"remaster/services/auth/models"
@@ -16,19 +17,21 @@ import (
 
 type AuthHandler struct {
 	pb.UnimplementedAuthServiceServer
-	authService *services.AuthService
-	logger      *slog.Logger
+	errorHandler *errors.ErrorHandler
+	authService  *services.AuthService
+	logger       *slog.Logger
 }
 
 func NewAuthHandler(authService *services.AuthService, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
-		authService: authService,
-		logger:      logger,
+		authService:  authService,
+		logger:       logger.With(slog.String("auth", "handler")),
+		errorHandler: errors.NewErrorHandler(logger),
 	}
 }
 
 func (c *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
-	c.logger.Info("Registration request for email", "registration", req.Email)
+	c.logger.Info("Registration request", "email", req.Email)
 
 	metadata := extractRequestMetadata(ctx)
 
@@ -43,11 +46,11 @@ func (c *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest)
 
 	resp, err := c.authService.CreateUser(ctx, registerReq, metadata)
 	if err != nil {
-		c.logger.Error("Registration failed", "error", err)
+		c.logger.Error("Registration failed", "error", err, "email", req.Email)
 		return &pb.RegisterResponse{
 			Success: false,
-			Message: "3Registration failed",
-		}, err
+			Message: err.Error(),
+		}, c.errorHandler.HandleGrpcError(ctx, err)
 	}
 
 	pbResp := &pb.RegisterResponse{
