@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	cfg "remaster/shared"
+	"remaster/shared/connection"
 	auth_pb "remaster/shared/proto/auth"
 )
 
@@ -31,15 +32,17 @@ type Server struct {
 	router     *gin.Engine
 
 	grpcConnections map[string]*grpc.ClientConn
+	RedisManager    *connection.RedisManager
 
 	// GRPC clients
 	authClient auth_pb.AuthServiceClient
 }
 
-func NewServer(config *cfg.Config, logger *slog.Logger) *Server {
+func NewServer(config *cfg.Config, logger *slog.Logger, redisMgr *connection.RedisManager) *Server {
 	return &Server{
 		Config:          config,
 		Logger:          logger,
+		RedisManager:    redisMgr,
 		grpcConnections: make(map[string]*grpc.ClientConn),
 	}
 }
