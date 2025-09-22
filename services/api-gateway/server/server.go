@@ -20,13 +20,15 @@ import (
 
 	cfg "remaster/shared"
 	"remaster/shared/connection"
+	"remaster/shared/errors"
 	auth_pb "remaster/shared/proto/auth"
 )
 
 type Server struct {
-	Config    *cfg.Config
-	Logger    *slog.Logger
-	connMutex sync.RWMutex
+	Config       *cfg.Config
+	Logger       *slog.Logger
+	errorHandler *errors.ErrorHandler
+	connMutex    sync.RWMutex
 
 	httpServer *http.Server
 	router     *gin.Engine
@@ -38,10 +40,11 @@ type Server struct {
 	authClient auth_pb.AuthServiceClient
 }
 
-func NewServer(config *cfg.Config, logger *slog.Logger, redisMgr *connection.RedisManager) *Server {
+func NewServer(config *cfg.Config, logger *slog.Logger, errorHandler *errors.ErrorHandler, redisMgr *connection.RedisManager) *Server {
 	return &Server{
 		Config:          config,
 		Logger:          logger,
+		errorHandler:    errorHandler,
 		RedisManager:    redisMgr,
 		grpcConnections: make(map[string]*grpc.ClientConn),
 	}
@@ -79,50 +82,41 @@ func (s *Server) Start() error {
 
 func (s *Server) initializeGRPCClients() error {
 	s.Logger.Info("Initializing server components")
+
 	services := []struct {
 		name string
 		init func(*grpc.ClientConn)
 	}{
-		{
-			name: "auth",
-			init: func(conn *grpc.ClientConn) {
-				s.authClient = auth_pb.NewAuthServiceClient(conn)
-			},
-		},
+		{name: "auth", init: func(conn *grpc.ClientConn) {
+			s.authClient = auth_pb.NewAuthServiceClient(conn)
+		}},
 	}
 
 	for _, service := range services {
 		address, err := s.Config.GetServiceGRPCAddr(service.name)
 		if err != nil {
-			return fmt.Errorf("failed to get auth service address: %w", err)
+			return fmt.Errorf("failed to get %s service address: %w", service.name, err)
 		}
 
 		conn, err := s.connectToService(service.name, address)
 		if err != nil {
-			s.Logger.Error("Failed to create connection with service:",
-				"service", service.name,
-				"error", err,
-			)
-			// Continue connecting to other services even if one fails
-			continue
-		}
+			s.Logger.Error("Failed to connect to service",
+				"service", service.name, "error", err)
+			return fmt.Errorf("service %s not available: %w", service.name, err)
 
+		}
 		if conn == nil {
-			s.Logger.Error("Connection is nil for service", "service", service.name)
-			continue
+			s.Logger.Error("nil connection for service", "service", service.name)
+			return fmt.Errorf("service %s connection is nil", service.name)
+
 		}
 
 		s.connMutex.Lock()
 		s.grpcConnections[service.name] = conn
 		s.connMutex.Unlock()
 
-		// Initialize the specific client
 		service.init(conn)
-
-		s.Logger.Info("Successfully connected to service",
-			"service", service.name,
-			"state", conn.GetState().String(),
-		)
+		s.Logger.Info("Successfully connected to service", "service", service.name)
 	}
 
 	s.Logger.Info("Server initialization completed successfully")
@@ -147,7 +141,7 @@ func (s *Server) connectToService(serviceName, address string) (*grpc.ClientConn
 			MinConnectTimeout: 5 * time.Second,
 		}),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                10 * time.Second,
+			Time:                30 * time.Second,
 			Timeout:             3 * time.Second,
 			PermitWithoutStream: true,
 		}),
