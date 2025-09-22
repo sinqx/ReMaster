@@ -101,7 +101,7 @@ type KafkaConfig struct {
 
 type LogConfig struct {
 	Level  string `mapstructure:"level" validate:"required,oneof=debug info warn error"`
-	Format string `mapstructure:"format" validate:"oneof=json text"`
+	Format string `mapstructure:"format" validate:"oneof=pretty json"`
 	Output string `mapstructure:"output" validate:"oneof=stdout stderr file"`
 	File   string `mapstructure:"file"`
 }
@@ -222,7 +222,7 @@ func setDefaults() {
 
 	// Log defaults
 	viper.SetDefault("log.level", "info")
-	viper.SetDefault("log.format", "json")
+	viper.SetDefault("log.format", "pretty")
 	viper.SetDefault("log.output", "stdout")
 }
 
