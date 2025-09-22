@@ -5,30 +5,26 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 	"strings"
-	"time"
 
 	config "remaster/shared"
 
-	"github.com/fatih/color" // For colored output
+	"github.com/fatih/color"
 )
 
-// Custom attributes for logging context
-type logContextKey string
-
+// Context keys for request tracing
 const (
-	serviceKey   logContextKey = "service"
-	requestIDKey logContextKey = "request_id"
+	CorrelationIDKey = "correlation_id"
+	ServiceNameKey   = "service"
+	RequestIDKey     = "request_id"
 )
 
-// PrettyHandler is a custom handler for pretty output
 type PrettyHandler struct {
-	handler slog.Handler
 }
 
 func (h PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
-	// Define color based on level
-	var levelColor func(format string, a ...interface{}) string
+	var levelColor func(format string, a ...any) string
 	switch r.Level {
 	case slog.LevelDebug:
 		levelColor = color.New(color.FgCyan).SprintfFunc()
@@ -42,51 +38,73 @@ func (h PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		levelColor = color.New(color.FgWhite).SprintfFunc()
 	}
 
-	// Get time with color
 	timeColor := color.New(color.FgWhite, color.Faint).SprintFunc()
-	timestamp := timeColor(r.Time.Format(time.RFC3339))
+	timestamp := timeColor(r.Time.Format("2006-01-02 15:04:05.000"))
 
-	// Get service and request_id from context if available
-	service := ctx.Value(serviceKey)
-	requestID := ctx.Value(requestIDKey)
+	var correlationID, service, requestID string
+	attrs := map[string]any{}
 
-	// Format message
-	msg := r.Message
-	if service != nil {
-		msg = fmt.Sprintf("[%s] %s", service, msg)
-	}
-	if requestID != nil {
-		msg = fmt.Sprintf("%s [req:%s]", msg, requestID)
-	}
-
-	// Collect attributes
-	var attrs []string
 	r.Attrs(func(a slog.Attr) bool {
-		// Skip system attributes if needed
-		if a.Key == "time" || a.Key == "level" {
-			return true
+		switch a.Key {
+		case CorrelationIDKey:
+			correlationID = a.Value.String()
+		case ServiceNameKey:
+			service = a.Value.String()
+		case RequestIDKey:
+			requestID = a.Value.String()
+		case "time", "level":
+		default:
+			attrs[a.Key] = a.Value.Any()
 		}
-		attrs = append(attrs, fmt.Sprintf("%s=%v", a.Key, a.Value.Any()))
 		return true
 	})
-	attrStr := strings.Join(attrs, " ")
 
-	// Form the final string
-	output := fmt.Sprintf("%s %s %s %s",
-		timestamp,
-		levelColor(r.Level.String()),
-		msg,
-		attrStr,
-	)
+	header := fmt.Sprintf("%s %s", timestamp, levelColor("%-5s", r.Level.String()))
 
-	// Output to stdout
-	fmt.Fprintln(os.Stdout, output)
+	var contextParts []string
+	if service != "" {
+		contextParts = append(contextParts, fmt.Sprintf("svc:%s", service))
+	}
+	if correlationID != "" {
+		contextParts = append(contextParts, fmt.Sprintf("cid:%s", correlationID))
+	}
+	if requestID != "" {
+		contextParts = append(contextParts, fmt.Sprintf("rid:%s", requestID))
+	}
+	contextStr := ""
+	if len(contextParts) > 0 {
+		contextStr = "[" + strings.Join(contextParts, " ") + "] "
+	}
+
+	msg := fmt.Sprintf("%s %s%s", header, contextStr, r.Message)
+
+	if len(attrs) > 0 {
+		attrLines := []string{}
+		for k, v := range attrs {
+			attrLines = append(attrLines, fmt.Sprintf("    %-12s: %v", k, v))
+		}
+		sort.Strings(attrLines)
+		msg += "\n" + strings.Join(attrLines, "\n")
+	}
+
+	fmt.Fprintln(os.Stdout, msg)
 	return nil
 }
 
-// New creates a new logger with a custom handler
+func (h PrettyHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return true
+}
+
+func (h PrettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return h
+}
+
+func (h PrettyHandler) WithGroup(name string) slog.Handler {
+	return h
+}
+
+// New creates a new structured logger
 func New(cfg config.LogConfig) *slog.Logger {
-	// Set logging level
 	var level slog.Level
 	switch strings.ToLower(cfg.Level) {
 	case "debug":
@@ -99,41 +117,49 @@ func New(cfg config.LogConfig) *slog.Logger {
 		level = slog.LevelInfo
 	}
 
-	// Configure base handler
 	opts := &slog.HandlerOptions{
 		Level: level,
 	}
 
-	// Create custom handler
-	handler := PrettyHandler{
-		handler: slog.NewTextHandler(os.Stdout, opts),
+	var handler slog.Handler
+	if cfg.Format == "pretty" {
+		handler = PrettyHandler{}
+	} else {
+		// Production JSON format
+		handler = slog.NewJSONHandler(os.Stdout, opts)
 	}
 
-	// Wrap in slog.Logger
-	logger := slog.New(handler)
-
-	// Add global context (optional)
-	return logger.With(
+	return slog.New(handler).With(
 		slog.String("app", "remaster"),
 	)
 }
 
-// WithService adds the service name to the logger context
-func WithService(logger *slog.Logger, service string) *slog.Logger {
-	return logger.With(slog.String(string(serviceKey), service))
+// WithService adds service context to logger
+func WithService(logger *slog.Logger, serviceName string) *slog.Logger {
+	return logger.With(slog.String(ServiceNameKey, serviceName))
 }
 
-// WithRequestID adds the request ID to the logger context
+// WithCorrelationID adds correlation ID to logger
+func WithCorrelationID(logger *slog.Logger, correlationID string) *slog.Logger {
+	return logger.With(slog.String(CorrelationIDKey, correlationID))
+}
+
+// WithRequestID adds request ID to logger
 func WithRequestID(logger *slog.Logger, requestID string) *slog.Logger {
-	return logger.With(slog.String(string(requestIDKey), requestID))
+	return logger.With(slog.String(RequestIDKey, requestID))
 }
 
-func (h PrettyHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return h.handler.Enabled(ctx, level)
+// FromContext extracts logger from context or returns default
+func FromContext(ctx context.Context, defaultLogger *slog.Logger) *slog.Logger {
+	if logger, ok := ctx.Value("logger").(*slog.Logger); ok {
+		return logger
+	}
+	return defaultLogger
 }
-func (h PrettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return PrettyHandler{handler: h.handler.WithAttrs(attrs)}
-}
-func (h PrettyHandler) WithGroup(name string) slog.Handler {
-	return PrettyHandler{handler: h.handler.WithGroup(name)}
+
+// ToContext adds logger to context
+func ToContext(ctx context.Context, log *slog.Logger) context.Context {
+	type contextKey string
+	const loggerKey contextKey = "logger"
+	return context.WithValue(ctx, loggerKey, log)
 }
