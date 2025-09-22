@@ -2,97 +2,146 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
-	"net/http"
-	"net/http/httputil"
 	"os"
-	"remaster/services/api-gateway/models"
-	err "remaster/shared/errors"
-	"runtime/debug"
+	"remaster/shared/errors"
+	"remaster/shared/logger"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
-func Recovery(logger *slog.Logger) gin.HandlerFunc {
+func CorrelationID() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		correlationID := c.GetHeader("X-Correlation-ID")
+		if correlationID == "" {
+			correlationID = uuid.New().String()
+		}
+
+		c.Header("X-Correlation-ID", correlationID)
+		c.Set("correlation_id", correlationID)
+		c.Next()
+	}
+}
+
+func RequestLogger(baseLogger *slog.Logger, eh *errors.ErrorHandler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+
+		// Get or generate correlation ID
+		correlationID, _ := c.Get("correlation_id")
+		if correlationID == nil {
+			correlationID = uuid.New().String()
+			c.Set("correlation_id", correlationID)
+		}
+
+		// Create request-specific logger
+		requestLogger := logger.WithCorrelationID(baseLogger, correlationID.(string))
+
+		// Add to context for handlers
+		ctx := logger.ToContext(c.Request.Context(), requestLogger)
+		c.Request = c.Request.WithContext(ctx)
+
+		// Process request
+		c.Next()
+
+		// Calculate request metrics
+		latency := time.Since(start)
+		path := c.Request.URL.Path
+		if raw := c.Request.URL.RawQuery; raw != "" {
+			path = path + "?" + raw
+		}
+
+		// Prepare log attributes
+		logAttrs := []slog.Attr{
+			slog.String("method", c.Request.Method),
+			slog.String("path", path),
+			slog.Int("status", c.Writer.Status()),
+			slog.String("client_ip", c.ClientIP()),
+			slog.Duration("latency", latency),
+			slog.Int("body_size", c.Writer.Size()),
+		}
+
+		// Handle errors if present
+		if len(c.Errors) > 0 {
+			err := c.Errors.Last().Err
+			logAttrs = append(logAttrs, slog.String("error", err.Error()))
+
+			// Use error handler to send proper response
+			eh.HandleGinError(c, err)
+
+			// Log as error
+			requestLogger.LogAttrs(c.Request.Context(), slog.LevelError,
+				"HTTP request completed with error", logAttrs...)
+		} else {
+			// Determine log level based on status
+			logLevel := slog.LevelInfo
+			if c.Writer.Status() >= 400 {
+				logLevel = slog.LevelWarn
+			}
+
+			requestLogger.LogAttrs(c.Request.Context(), logLevel,
+				"HTTP request completed", logAttrs...)
+		}
+	}
+}
+
+func Recovery(baseLogger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if err := recover(); err != nil {
-				// Check for a broken connection, as it is not really a
-				// condition that warrants a panic stack trace.
+				// Get request logger from context
+				requestLogger := logger.FromContext(c.Request.Context(), baseLogger)
+
+				// Check for broken connection
 				var brokenPipe bool
 				if ne, ok := err.(*net.OpError); ok {
 					if se, ok := ne.Err.(*os.SyscallError); ok {
-						if strings.Contains(strings.ToLower(se.Error()), "broken pipe") ||
-							strings.Contains(strings.ToLower(se.Error()), "connection reset by peer") {
+						errStr := strings.ToLower(se.Error())
+						if strings.Contains(errStr, "broken pipe") ||
+							strings.Contains(errStr, "connection reset by peer") {
 							brokenPipe = true
 						}
 					}
 				}
 
-				httpRequest, _ := httputil.DumpRequest(c.Request, false)
+				httpPath := c.Request.Method + " " + c.Request.URL.Path
+
 				if brokenPipe {
-					logger.Error("Broken pipe",
-						slog.String("path", c.Request.URL.Path),
-						slog.Any("error", err),
-						slog.String("request", string(httpRequest)),
+					requestLogger.WarnContext(c.Request.Context(),
+						"Connection broken during request",
+						slog.String("path", httpPath),
+						slog.Any("panic", err),
 					)
-					// If the connection is dead, we can't write a status to it.
-					c.Error(err.(error))
-					c.Abort()
-					return
+
+					c.Error(errors.NewInternalError(
+						fmt.Sprintf("Connection broken while handling %s", httpPath),
+						fmt.Errorf("BROKEN_PIPE:%v", err),
+					))
+				} else {
+					requestLogger.ErrorContext(c.Request.Context(),
+						"Panic recovered during request",
+						slog.String("path", httpPath),
+						slog.Any("panic", err),
+					)
+
+					if !c.Writer.Written() {
+						c.Error(errors.NewInternalError(
+							fmt.Sprintf("Panic recovered while handling %s", httpPath),
+							fmt.Errorf("%v", err),
+						))
+					}
 				}
 
-				logger.Error("Panic recovered",
-					slog.Any("error", err),
-					slog.String("request", string(httpRequest)),
-					slog.String("stack", string(debug.Stack())),
-				)
-
-				if !c.Writer.Written() {
-					c.JSON(http.StatusInternalServerError, models.Envelope{
-						Message: "Internal server error",
-						Success: false,
-					})
-				}
+				c.Abort()
 			}
 		}()
 		c.Next()
-	}
-}
-
-func Logger(logger *slog.Logger) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
-
-		// Process request
-		c.Next()
-
-		// Calculate request duration
-		latency := time.Since(start)
-
-		clientIP := c.ClientIP()
-		method := c.Request.Method
-		statusCode := c.Writer.Status()
-		bodySize := c.Writer.Size()
-
-		if raw != "" {
-			path = path + "?" + raw
-		}
-
-		logger.Info("HTTP request",
-			slog.String("method", method),
-			slog.String("path", path),
-			slog.Int("status", statusCode),
-			slog.String("client_ip", clientIP),
-			slog.Duration("latency", latency),
-			slog.Int("body_size", bodySize),
-		)
 	}
 }
 
@@ -114,7 +163,7 @@ func CORS() gin.HandlerFunc {
 	}
 }
 
-func ErrorMiddleware(eh *err.ErrorHandler) gin.HandlerFunc {
+func GinErrorMiddleware(eh *errors.ErrorHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
 		if len(c.Errors) > 0 {
@@ -132,11 +181,10 @@ func RateLimiter(rdb *redis.Client, limit int, window time.Duration) gin.Handler
 
 		count, err := rdb.Incr(ctx, key).Result()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Envelope{
-				Success: false,
-				Message: "Rate limiter error",
-				Code:    "INTERNAL_ERROR",
-			})
+			c.Error(errors.NewInternalError(
+				"Rate limiter error",
+				err,
+			))
 			c.Abort()
 			return
 		}
@@ -146,11 +194,7 @@ func RateLimiter(rdb *redis.Client, limit int, window time.Duration) gin.Handler
 		}
 
 		if int(count) > limit {
-			c.JSON(http.StatusTooManyRequests, models.Envelope{
-				Success: false,
-				Message: "Too many requests",
-				Code:    "RATE_LIMIT",
-			})
+			c.Error(errors.NewRateLimitError("Too many requests"))
 			c.Abort()
 			return
 		}
