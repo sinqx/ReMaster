@@ -4,6 +4,8 @@ import (
 	"errors" // stdlib для As/Is
 	"fmt"
 	"net/http"
+
+	"google.golang.org/grpc/codes"
 )
 
 type ErrorType int
@@ -178,4 +180,81 @@ func IsDatabaseError(err error) bool {
 func IsInternalError(err error) bool {
 	var target *InternalError
 	return errors.As(err, &target)
+}
+
+func (et ErrorType) String() string {
+	switch et {
+	case ErrorTypeValidation:
+		return "validation"
+	case ErrorTypeNotFound:
+		return "not_found"
+	case ErrorTypeConflict:
+		return "conflict"
+	case ErrorTypeUnauthorized:
+		return "unauthorized"
+	case ErrorTypeForbidden:
+		return "forbidden"
+	case ErrorTypeBadRequest:
+		return "bad_request"
+	case ErrorTypeRateLimit:
+		return "rate_limit"
+	case ErrorTypeInternal:
+		return "internal"
+	case ErrorTypeDatabase:
+		return "database"
+	default:
+		return "unknown"
+	}
+}
+
+func (errType ErrorType) mapToGrpcCode() codes.Code {
+	switch errType {
+	case ErrorTypeConflict:
+		return codes.AlreadyExists
+	case ErrorTypeNotFound:
+		return codes.NotFound
+	case ErrorTypeValidation, ErrorTypeBadRequest:
+		return codes.InvalidArgument
+	case ErrorTypeUnauthorized:
+		return codes.Unauthenticated
+	case ErrorTypeForbidden:
+		return codes.PermissionDenied
+	case ErrorTypeRateLimit:
+		return codes.ResourceExhausted
+	case ErrorTypeDatabase, ErrorTypeInternal:
+		return codes.Internal
+	default:
+		return codes.Internal
+	}
+}
+
+func grpcToHTTP(code codes.Code) int {
+	switch code {
+	case codes.OK:
+		return http.StatusOK
+	case codes.Canceled:
+		return http.StatusRequestTimeout
+	case codes.InvalidArgument, codes.FailedPrecondition, codes.OutOfRange:
+		return http.StatusBadRequest
+	case codes.DeadlineExceeded:
+		return http.StatusGatewayTimeout
+	case codes.NotFound:
+		return http.StatusNotFound
+	case codes.AlreadyExists, codes.Aborted:
+		return http.StatusConflict
+	case codes.PermissionDenied:
+		return http.StatusForbidden
+	case codes.ResourceExhausted:
+		return http.StatusTooManyRequests
+	case codes.Unimplemented:
+		return http.StatusNotImplemented
+	case codes.Internal, codes.DataLoss, codes.Unknown:
+		return http.StatusInternalServerError
+	case codes.Unavailable:
+		return http.StatusServiceUnavailable
+	case codes.Unauthenticated:
+		return http.StatusUnauthorized
+	default:
+		return http.StatusInternalServerError
+	}
 }
