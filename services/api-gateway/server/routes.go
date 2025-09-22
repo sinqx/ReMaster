@@ -15,11 +15,11 @@ func (s *Server) setupRoutes() {
 	s.router = gin.New()
 
 	s.router.Use(
-		middleware.Logger(s.Logger),
-		middleware.Recovery(s.Logger),
-		middleware.CORS(),
-		// middleware.GRPCErrorHandler(s.Logger),
+		middleware.RequestLogger(s.Logger, s.errorHandler),
 		middleware.RateLimiter(s.RedisManager.GetClient(), 100, 1*time.Minute),
+		middleware.CORS(),
+		middleware.GinErrorMiddleware(s.errorHandler),
+		middleware.Recovery(s.Logger),
 	)
 
 	s.router.GET("/health", s.handleHealth)
@@ -32,7 +32,7 @@ func (s *Server) setupRoutes() {
 func (s *Server) setupAuthRoutes() {
 	auth := s.router.Group("/auth")
 
-	authHandler := handlers.NewAuthHandler(s.authClient, s.Logger)
+	authHandler := handlers.NewAuthHandler(s.authClient, s.Logger, s.errorHandler)
 
 	auth.POST("/register", authHandler.Register)
 

@@ -114,9 +114,6 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 		return nil, fmt.Errorf("failed to save refresh token: %w", err)
 	}
 
-	// s.recordLoginAttempt(ctx, req.Email, metadata.IPAddress, true, "registration")
-	// s.logger.Info("User registered successfully", "userID", user.ID.Hex())
-
 	return &models.AuthResponse{
 		User:         user.ToResponse(),
 		AccessToken:  accessToken,
