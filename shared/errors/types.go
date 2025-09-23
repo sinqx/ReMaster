@@ -1,13 +1,14 @@
 package errors
 
 import (
-	"errors" // stdlib для As/Is
+	"errors"
 	"fmt"
 	"net/http"
 
 	"google.golang.org/grpc/codes"
 )
 
+// Error types
 type ErrorType int
 
 const (
@@ -22,6 +23,7 @@ const (
 	ErrorTypeDatabase
 )
 
+// Universal application error
 type AppError struct {
 	Type       ErrorType
 	Code       string
@@ -42,145 +44,55 @@ func (e *AppError) Unwrap() error {
 	return e.Cause
 }
 
-type ValidationError struct{ AppError }
-type ConflictError struct{ AppError }
-type DatabaseError struct{ AppError }
-type InternalError struct{ AppError }
-type NotFoundError struct{ AppError }
-type UnauthorizedError struct{ AppError }
-type ForbiddenError struct{ AppError }
-type BadRequestError struct{ AppError }
-type RateLimitError struct{ AppError }
-
-func NewValidationError(msg string, details map[string]string) *ValidationError {
-	return &ValidationError{AppError{
-		Type:       ErrorTypeValidation,
-		Code:       "VALIDATION_ERROR",
+// Factories for different types of errors
+func NewAppError(errType ErrorType, code, msg string, status int, cause error, details map[string]string) *AppError {
+	return &AppError{
+		Type:       errType,
+		Code:       code,
 		Message:    msg,
-		StatusCode: http.StatusBadRequest,
+		Cause:      cause,
+		StatusCode: status,
 		Details:    details,
-	}}
+	}
 }
 
-func NewConflictError(msg string, cause error) *ConflictError {
-	return &ConflictError{AppError{
-		Type:       ErrorTypeConflict,
-		Code:       "CONFLICT_ERROR",
-		Message:    msg,
-		Cause:      cause,
-		StatusCode: http.StatusConflict,
-	}}
+func NewValidationError(msg string, details map[string]string) *AppError {
+	return NewAppError(ErrorTypeValidation, "VALIDATION_ERROR", msg, http.StatusBadRequest, nil, details)
 }
 
-func NewDatabaseError(msg string, cause error) *DatabaseError {
-	return &DatabaseError{AppError{
-		Type:       ErrorTypeDatabase,
-		Code:       "DATABASE_ERROR",
-		Message:    msg,
-		Cause:      cause,
-		StatusCode: http.StatusInternalServerError,
-	}}
+func NewConflictError(msg string, cause error) *AppError {
+	return NewAppError(ErrorTypeConflict, "CONFLICT_ERROR", msg, http.StatusConflict, cause, nil)
 }
 
-func NewInternalError(msg string, cause error) *InternalError {
-	return &InternalError{AppError{
-		Type:       ErrorTypeInternal,
-		Code:       "INTERNAL_ERROR",
-		Message:    msg,
-		Cause:      cause,
-		StatusCode: http.StatusInternalServerError,
-	}}
+func NewDatabaseError(msg string, cause error) *AppError {
+	return NewAppError(ErrorTypeDatabase, "DATABASE_ERROR", msg, http.StatusInternalServerError, cause, nil)
 }
 
-func NewNotFoundError(msg string) *NotFoundError {
-	return &NotFoundError{AppError{
-		Type:       ErrorTypeNotFound,
-		Code:       "NOT_FOUND",
-		Message:    msg,
-		StatusCode: http.StatusNotFound,
-	}}
+func NewInternalError(msg string, cause error) *AppError {
+	return NewAppError(ErrorTypeInternal, "INTERNAL_ERROR", msg, http.StatusInternalServerError, cause, nil)
 }
 
-func NewUnauthorizedError(msg string) *UnauthorizedError {
-	return &UnauthorizedError{AppError{
-		Type:       ErrorTypeUnauthorized,
-		Code:       "UNAUTHORIZED",
-		Message:    msg,
-		StatusCode: http.StatusUnauthorized,
-	}}
+func NewNotFoundError(msg string) *AppError {
+	return NewAppError(ErrorTypeNotFound, "NOT_FOUND", msg, http.StatusNotFound, nil, nil)
 }
 
-func NewForbiddenError(msg string) *ForbiddenError {
-	return &ForbiddenError{AppError{
-		Type:       ErrorTypeForbidden,
-		Code:       "FORBIDDEN",
-		Message:    msg,
-		StatusCode: http.StatusForbidden,
-	}}
+func NewUnauthorizedError(msg string) *AppError {
+	return NewAppError(ErrorTypeUnauthorized, "UNAUTHORIZED", msg, http.StatusUnauthorized, nil, nil)
 }
 
-func NewBadRequestError(msg string) *BadRequestError {
-	return &BadRequestError{AppError{
-		Type:       ErrorTypeBadRequest,
-		Code:       "BAD_REQUEST",
-		Message:    msg,
-		StatusCode: http.StatusBadRequest,
-	}}
+func NewForbiddenError(msg string) *AppError {
+	return NewAppError(ErrorTypeForbidden, "FORBIDDEN", msg, http.StatusForbidden, nil, nil)
 }
 
-func NewRateLimitError(msg string) *RateLimitError {
-	return &RateLimitError{AppError{
-		Type:       ErrorTypeRateLimit,
-		Code:       "RATE_LIMIT_EXCEEDED",
-		Message:    msg,
-		StatusCode: http.StatusTooManyRequests,
-	}}
+func NewBadRequestError(msg string) *AppError {
+	return NewAppError(ErrorTypeBadRequest, "BAD_REQUEST", msg, http.StatusBadRequest, nil, nil)
 }
 
-func IsValidationError(err error) bool {
-	var target *ValidationError
-	return errors.As(err, &target)
+func NewRateLimitError(msg string) *AppError {
+	return NewAppError(ErrorTypeRateLimit, "RATE_LIMIT_EXCEEDED", msg, http.StatusTooManyRequests, nil, nil)
 }
 
-func IsNotFoundError(err error) bool {
-	var target *NotFoundError
-	return errors.As(err, &target)
-}
-
-func IsConflictError(err error) bool {
-	var target *ConflictError
-	return errors.As(err, &target)
-}
-
-func IsUnauthorizedError(err error) bool {
-	var target *UnauthorizedError
-	return errors.As(err, &target)
-}
-
-func IsForbiddenError(err error) bool {
-	var target *ForbiddenError
-	return errors.As(err, &target)
-}
-
-func IsBadRequestError(err error) bool {
-	var target *BadRequestError
-	return errors.As(err, &target)
-}
-
-func IsRateLimitError(err error) bool {
-	var target *RateLimitError
-	return errors.As(err, &target)
-}
-
-func IsDatabaseError(err error) bool {
-	var target *DatabaseError
-	return errors.As(err, &target)
-}
-
-func IsInternalError(err error) bool {
-	var target *InternalError
-	return errors.As(err, &target)
-}
+// -------- Mapping --------
 
 func (et ErrorType) String() string {
 	switch et {
@@ -207,8 +119,9 @@ func (et ErrorType) String() string {
 	}
 }
 
-func (errType ErrorType) mapToGrpcCode() codes.Code {
-	switch errType {
+// ErrorType -> gRPC Code
+func (et ErrorType) ToGrpcCode() codes.Code {
+	switch et {
 	case ErrorTypeConflict:
 		return codes.AlreadyExists
 	case ErrorTypeNotFound:
@@ -228,7 +141,8 @@ func (errType ErrorType) mapToGrpcCode() codes.Code {
 	}
 }
 
-func grpcToHTTP(code codes.Code) int {
+// gRPC Code -> HTTP Status
+func GrpcToHTTP(code codes.Code) int {
 	switch code {
 	case codes.OK:
 		return http.StatusOK
@@ -257,4 +171,14 @@ func grpcToHTTP(code codes.Code) int {
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+// -------- Helper --------
+
+func AsAppError(err error) (*AppError, bool) {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr, true
+	}
+	return nil, false
 }

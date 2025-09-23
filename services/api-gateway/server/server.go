@@ -141,8 +141,8 @@ func (s *Server) connectToService(serviceName, address string) (*grpc.ClientConn
 			MinConnectTimeout: 5 * time.Second,
 		}),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                30 * time.Second,
-			Timeout:             3 * time.Second,
+			Time:                60 * time.Second,
+			Timeout:             5 * time.Second,
 			PermitWithoutStream: true,
 		}),
 	)

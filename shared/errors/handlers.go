@@ -2,6 +2,7 @@ package errors
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"remaster/shared/logger"
@@ -55,29 +56,33 @@ func (eh *ErrorHandler) HandleGinError(c *gin.Context, err error) {
 }
 
 // ---- gRPC → gRPC ----
-func (eh *ErrorHandler) HandleGrpcError(ctx context.Context, err error) error {
-	requestLogger := logger.FromContext(ctx, eh.logger)
+func (eh *ErrorHandler) HandleGrpcError(err error) error {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return status.Error(appErr.Type.ToGrpcCode(), appErr.Message)
+	}
+	// fallback
+	return status.Error(codes.Internal, "Internal server error")
+}
 
-	appErr, ok := err.(*AppError)
-	if !ok {
-		requestLogger.ErrorContext(ctx, "non-app error", slog.Any("error", err))
-		return status.Error(codes.Internal, "Internal server error")
+func (eh *ErrorHandler) HandleHttpError(c *gin.Context, err error) {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		c.JSON(appErr.StatusCode, ErrorResponse{
+			Success: false,
+			Error:   appErr.Message,
+			Code:    appErr.Code,
+			Details: appErr.Details,
+		})
+		return
 	}
 
-	eh.logError(ctx, requestLogger, appErr)
-
-	grpcCode := ErrorType.mapToGrpcCode(appErr.Type)
-	st := status.New(grpcCode, appErr.Message)
-
-	detail := &errdetails.ErrorInfo{
-		Reason:   appErr.Code,
-		Metadata: appErr.Details,
-	}
-	stWithDetails, err2 := st.WithDetails(detail)
-	if err2 != nil {
-		return st.Err()
-	}
-	return stWithDetails.Err()
+	// fallback
+	c.JSON(http.StatusInternalServerError, ErrorResponse{
+		Success: false,
+		Error:   "Internal server error",
+		Code:    "INTERNAL_ERROR",
+	})
 }
 
 // ---- gRPC → HTTP (для API Gateway) ----
@@ -97,7 +102,7 @@ func (eh *ErrorHandler) HandleGrpcToHttp(c *gin.Context, err error) {
 		return
 	}
 
-	httpStatus := grpcToHTTP(st.Code())
+	httpStatus := GrpcToHTTP(st.Code())
 	resp := ErrorResponse{
 		Success: false,
 		Error:   st.Message(),
