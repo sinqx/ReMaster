@@ -71,7 +71,7 @@ type RegisterRequest struct {
 	Password  string   `json:"password" validate:"required,min=8"`
 	FirstName string   `json:"first_name" validate:"required,min=2,max=50"`
 	LastName  string   `json:"last_name" validate:"required,min=2,max=50"`
-	Phone     string   `json:"phone" validate:"required"`
+	Phone     string   `json:"phone" validate:"required,min=6,max=10"`
 	UserType  UserType `json:"user_type" validate:"required,oneof=client master"`
 }
 

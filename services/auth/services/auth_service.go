@@ -83,7 +83,7 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 		return s.repo.Create(ctx, user)
 	}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 3))
 	if err != nil {
-		var conflictErr *et.ConflictError
+		conflictErr := et.NewConflictError("", nil)
 		if errors.As(err, &conflictErr) {
 			return nil, err
 		}

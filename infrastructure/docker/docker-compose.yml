@@ -3,13 +3,13 @@ name: ReMaster
 services:
   mongo:
     image: mongo:8.0.13
-    container_name: masters-mongo
+    container_name: remaster-mongo
     ports:
       - 27017:27017
     volumes:
       - mongo_data:/data/db
     networks:
-      - masters-network
+      - remaster-network
     healthcheck:
       test: [CMD, mongosh, --eval, db.adminCommand('ping')]
       interval: 10s
@@ -18,13 +18,13 @@ services:
 
   redis:
     image: redis:8.2.1-alpine
-    container_name: masters-redis
+    container_name: remaster-redis
     ports:
       - 6379:6379
     volumes:
       - redis_data:/data
     networks:
-      - masters-network
+      - remaster-network
     healthcheck:
       test: [CMD, redis-cli, ping]
       interval: 10s
@@ -36,7 +36,7 @@ services:
     build:
       context: ../..
       dockerfile: services/api-gateway/Dockerfile
-    container_name: masters-api-gateway
+    container_name: remaster-api-gateway
     depends_on:
       auth-service:
         condition: service_healthy
@@ -49,14 +49,14 @@ services:
       - ../../shared:/app/shared
       - ../../proto:/app/proto
     networks:
-      - masters-network
+      - remaster-network
     restart: unless-stopped
 
   auth-service:
     build:
       context: ../..
       dockerfile: services/auth/Dockerfile
-    container_name: masters-auth-service
+    container_name: remaster-auth-service
     depends_on:
       mongo:
         condition: service_healthy
@@ -71,7 +71,7 @@ services:
       - ../../shared:/app/shared
       - ../../proto:/app/proto
     networks:
-      - masters-network
+      - remaster-network
     restart: unless-stopped
     healthcheck:
       test:
@@ -87,7 +87,7 @@ services:
       start_period: 20s
 
 networks:
-  masters-network:
+  remaster-network:
     driver: bridge
 
 volumes:
@@ -98,16 +98,16 @@ volumes:
 
   # zookeeper:
   #   image: confluentinc/cp-zookeeper:7.4.0
-  #   container_name: masters-zookeeper
+  #   container_name: remaster-zookeeper
   #   environment:
   #     ZOOKEEPER_CLIENT_PORT: 2181
   #     ZOOKEEPER_TICK_TIME: 2000
   #   networks:
-  #     - masters-network
+  #     - remaster-network
 
   # kafka:
   #   image: confluentinc/cp-kafka:7.4.0
-  #   container_name: masters-kafka
+  #   container_name: remaster-kafka
   #   depends_on:
   #     - zookeeper
   #   ports:
@@ -121,7 +121,7 @@ volumes:
   #     KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
   #     KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
   #   networks:
-  #     - masters-network
+  #     - remaster-network
   #   healthcheck:
   #     test: [CMD, kafka-broker-api-versions, --bootstrap-server, localhost:9092]
   #     interval: 10s
@@ -130,7 +130,7 @@ volumes:
 
   # kafka-ui:
   #   image: provectuslabs/kafka-ui:latest
-  #   container_name: masters-kafka-ui
+  #   container_name: remaster-kafka-ui
   #   depends_on:
   #     - kafka
   #   ports:
@@ -139,11 +139,11 @@ volumes:
   #     KAFKA_CLUSTERS_0_NAME: local
   #     KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
   #   networks:
-  #     - masters-network
+  #     - remaster-network
 
   # prometheus:
   #   image: prom/prometheus:latest
-  #   container_name: masters-prometheus
+  #   container_name: remaster-prometheus
   #   ports:
   #     - 9090:9090
   #   volumes:
@@ -157,11 +157,11 @@ volumes:
   #     - --web.enable-lifecycle
   #     - --web.enable-admin-api
   #   networks:
-  #     - masters-network
+  #     - remaster-network
 
   # grafana:
   #   image: grafana/grafana:latest
-  #   container_name: masters-grafana
+  #   container_name: remaster-grafana
   #   ports:
   #     - 3000:3000
   #   environment:
@@ -171,14 +171,14 @@ volumes:
   #     - ./infrastructure/monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
   #     - ./infrastructure/monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
   #   networks:
-  #     - masters-network
+  #     - remaster-network
   #   depends_on:
   #     - prometheus
 
   # # MinIO for AWS S3 emulation
   # minio:
   #   image: minio/minio:latest
-  #   container_name: masters-minio
+  #   container_name: remaster-minio
   #   ports:
   #     - 9000:9000
   #     - 9001:9001
@@ -189,7 +189,7 @@ volumes:
   #     - minio_data:/data
   #   command: server /data --console-address :9001
   #   networks:
-  #     - masters-network
+  #     - remaster-network
   #   healthcheck:
   #     test: [CMD, curl, -f, http://localhost:9000/minio/health/live]
   #     interval: 30s
@@ -199,14 +199,14 @@ volumes:
   # # Jaeger for tracing
   # jaeger:
   #   image: jaegertracing/all-in-one:latest
-  #   container_name: masters-jaeger
+  #   container_name: remaster-jaeger
   #   ports:
   #     - 16686:16686
   #     - 14268:14268
   #   environment:
   #     COLLECTOR_OTLP_ENABLED: true
   #   networks:
-  #     - masters-network
+  #     - remaster-network
 
   # prometheus_data:
   #   driver: local

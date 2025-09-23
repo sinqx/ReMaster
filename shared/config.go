@@ -124,7 +124,7 @@ func LoadConfig(configPath ...string) (*Config, error) {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_", "grpc_port", "GRPCPort"))
 
 	viper.AutomaticEnv()
-	viper.SetEnvPrefix("MASTERS")
+	viper.SetEnvPrefix("REMASTER")
 
 	setDefaults()
 	bindEnvVars()
@@ -182,7 +182,7 @@ func setDefaults() {
 
 	// MongoDB defaults
 	viper.SetDefault("mongo.uri", "mongodb://localhost:27017")
-	viper.SetDefault("mongo.database", "masters_platform")
+	viper.SetDefault("mongo.database", "remasters_platform")
 	viper.SetDefault("mongo.max_pool_size", 100)
 	viper.SetDefault("mongo.min_pool_size", 5)
 	viper.SetDefault("mongo.connect_timeout", "10s")

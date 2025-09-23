@@ -50,7 +50,7 @@ func (c *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest)
 		return &pb.RegisterResponse{
 			Success: false,
 			Message: err.Error(),
-		}, c.errorHandler.HandleGrpcError(ctx, err)
+		}, c.errorHandler.HandleGrpcError(err)
 	}
 
 	pbResp := &pb.RegisterResponse{

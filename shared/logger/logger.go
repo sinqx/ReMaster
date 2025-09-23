@@ -39,7 +39,7 @@ func (h PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	timeColor := color.New(color.FgWhite, color.Faint).SprintFunc()
-	timestamp := timeColor(r.Time.Format("2006-01-02 15:04:05.000"))
+	timestamp := timeColor(r.Time.Format("2006/01/02 15:04:05"))
 
 	var correlationID, service, requestID string
 	attrs := map[string]any{}
