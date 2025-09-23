@@ -11,11 +11,18 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 )
 
 func (s *Server) startGRPCServer(ctx context.Context, grpcAddr string) error {
-	s.Logger.Info("gRPC server starting", "Address", grpcAddr)
+	s.Logger.Info("gRPC server starting with settings",
+		"MaxRecvMsgSize", s.Config.GRPC.MaxReceiveSize,
+		"MaxSendMsgSize", s.Config.GRPC.MaxSendSize,
+		"ConnectionTimeout", s.Config.GRPC.ConnectionTimeout,
+		"EnableReflection", s.Config.GRPC.EnableReflection,
+		"EnableHealthCheck", s.Config.GRPC.EnableReflection,
+	)
 
 	// Create TCP listener
 	lis, err := net.Listen("tcp", grpcAddr)
@@ -24,8 +31,15 @@ func (s *Server) startGRPCServer(ctx context.Context, grpcAddr string) error {
 		return fmt.Errorf("failed to create listener: %w", err)
 	}
 
+	// gRPC server with keepalive enforcement
+	kaep := keepalive.EnforcementPolicy{
+		MinTime:             30 * time.Second,
+		PermitWithoutStream: true,
+	}
+
 	// Configure gRPC server options
 	opts := []grpc.ServerOption{
+		grpc.KeepaliveEnforcementPolicy(kaep),
 		grpc.MaxRecvMsgSize(s.Config.GRPC.MaxReceiveSize),
 		grpc.MaxSendMsgSize(s.Config.GRPC.MaxSendSize),
 	}
