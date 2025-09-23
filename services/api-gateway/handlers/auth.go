@@ -54,7 +54,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	})
 	if err != nil {
 		h.logger.Error(
-			"gRPC registration failed!!!!!!!!!!!",
+			"gRPC registration failed",
 			"error", err,
 			"email", dto.Email)
 		if h.errorHandler == nil {

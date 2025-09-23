@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 
 	config "remaster/shared"
 
@@ -21,6 +22,22 @@ const (
 )
 
 type PrettyHandler struct {
+}
+
+var (
+	once     sync.Once
+	instance *slog.Logger
+)
+
+func init() {
+	color.NoColor = false
+}
+
+func Get(cfg config.LogConfig) *slog.Logger {
+	once.Do(func() {
+		instance = New(cfg)
+	})
+	return instance
 }
 
 func (h PrettyHandler) Handle(ctx context.Context, r slog.Record) error {

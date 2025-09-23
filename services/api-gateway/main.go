@@ -18,7 +18,7 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	logger := logger.New(cfg.Log)
+	logger := logger.Get(cfg.Log)
 	logger.Info("Starting API Gateway")
 
 	redisMgr := connection.NewRedisManager(&cfg.Redis)
@@ -37,7 +37,6 @@ func main() {
 
 	logger.Info("API Gateway stopped gracefully")
 }
-
 
 // func main() {
 // 	cfg, err := config.LoadConfig()

@@ -17,7 +17,7 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	logger := logger.New(cfg.Log)
+	logger := logger.Get(cfg.Log)
 	logger.Info("Starting Auth micro-service")
 
 	// dependencies initialization
