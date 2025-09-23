@@ -47,7 +47,8 @@ services:
     volumes:
       - ../../services/api-gateway:/app/services/api-gateway
       - ../../shared:/app/shared
-      - ../../proto:/app/proto
+    logging:
+      driver: local
     networks:
       - remaster-network
     restart: unless-stopped
@@ -69,7 +70,8 @@ services:
     volumes:
       - ../../services/auth-service:/app/services/auth-service
       - ../../shared:/app/shared
-      - ../../proto:/app/proto
+    logging:
+      driver: local
     networks:
       - remaster-network
     restart: unless-stopped

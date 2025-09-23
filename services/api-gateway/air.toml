@@ -1,0 +1,31 @@
+root = "/app"
+tmp_dir = "/app/tmp/api-gateway"
+
+[build]
+cmd = "go build -o /app/tmp/api-gateway/server /app/services/api-gateway/main.go"
+bin = "/app/tmp/api-gateway/server"
+include_dir = ["services/api-gateway", "shared"]
+include_ext = ["go", "proto"]
+exclude_dir = ["tmp", "vendor", "testdata", ".git", "node_modules"]
+exclude_regex = ["_test\\.go$", "\\.md$", "\\.ya?ml$"]
+delay = 1000
+stop_on_root = true
+poll = true
+poll_interval = 500
+log = "/app/tmp/api-gateway/build.log"
+env = ["CGO_ENABLED=0"]
+
+[color]
+main = "magenta"
+watcher = "cyan"
+build = "yellow"
+runner = "green"
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = true

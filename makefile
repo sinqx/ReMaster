@@ -1,7 +1,8 @@
 # -----------------------
 # Configuration
 # -----------------------
-DC := docker compose -f infrastructure/docker/docker-compose.yml
+DC_PROD := docker compose -f infrastructure/docker/docker-compose.yml
+DC_DEV := docker compose -f infrastructure/docker/docker-compose.yml -f infrastructure/docker/docker-compose.override.yml
 
 PROTO_DIR := proto
 GEN_DIR := shared/proto
@@ -59,59 +60,84 @@ proto-install-tools: ## Install protoc-gen-go and protoc-gen-go-grpc (local user
 # -----------------------
 # Docker / Compose targets
 # -----------------------
-.PHONY: up
-up: ## Build and start all services with docker-compose
-	$(DC) up -d --build
 
-.PHONY: up-no-build
-up-no-build: ## Start containers without rebuild
-	$(DC) up -d
+# Production commands
+.PHONY: up-prod
+up-prod: ## Build and start all services in production mode
+	$(DC_PROD) up -d --build
+
+.PHONY: down-prod
+down-prod: ## Stop production services
+	$(DC_PROD) down
+
+# Development commands (traditional)
+.PHONY: up-dev
+up-dev: ## Build and start all services in development mode
+	$(DC_DEV) up -d --build
+
+.PHONY: down-dev
+down-dev: ## Stop development services
+	$(DC_DEV) down
+
+# Watch commands (new - for hot reload)
+.PHONY: watch
+watch: ## Start services in watch mode (hot reload)
+	$(DC_DEV) watch
+
+.PHONY: watch-build
+watch-build: ## Build and start services in watch mode
+	$(DC_DEV) build
+	$(DC_DEV) watch
+
+.PHONY: watch-logs
+watch-logs: ## Watch services with logs output
+	$(DC_DEV) watch --no-up
 
 .PHONY: down
 down: ## Stop and remove containers
-	$(DC) down
+	$(DC_DEV) down
 
 .PHONY: restart
 restart: ## Restart all containers
-	$(DC) restart
+	$(DC_DEV) restart
 
 .PHONY: build
 build: ## Build images defined in docker-compose
-	$(DC) build
+	$(DC_DEV) build
 
 .PHONY: build-no-cache
 build-no-cache: ## Build images with no cache
-	$(DC) build --no-cache
+	$(DC_DEV) build --no-cache
 
 .PHONY: up-% 
 up-%: ## Build & start a single service (usage: make up-% where % is a service name as in docker-compose)
-	$(DC) up -d --build $*
+	$(DC_DEV) up -d --build $*
 
 .PHONY: build-%
 build-%: ## Build a specific service (usage: make build-<service>)
-	$(DC) build $*
+	$(DC_DEV) build $*
 
 .PHONY: logs
 logs: ## Follow logs for all services
-	$(DC) logs -f
+	$(DC_DEV) logs -f
 
 .PHONY: logs-%
 logs-%: ## Follow logs for a specific service, usage: make logs-% (e.g. make logs-api-gateway)
-	$(DC) logs -f $*
+	$(DC_DEV) logs -f $*
 
 .PHONY: exec
 exec: ## Exec into a running service, usage: make exec SERVICE=api-gateway CMD="sh"
 	@if [ -z "$(SERVICE)" ]; then echo "Please set SERVICE and CMD, e.g.: make exec SERVICE=api-gateway CMD='sh'"; exit 1; fi
-	$(DC) exec $(SERVICE) sh -c "$(CMD)"
+	$(DC_DEV) exec $(SERVICE) sh -c "$(CMD)"
 
 .PHONY: shell
 shell: ## Open interactive shell in a running container, usage: make shell SERVICE=api-gateway
 	@if [ -z "$(SERVICE)" ]; then echo "Please set SERVICE, e.g.: make shell SERVICE=api-gateway"; exit 1; fi
-	$(DC) exec -it $(SERVICE) sh
+	$(DC_DEV) exec -it $(SERVICE) sh
 
 .PHONY: clean
 clean: ## Stop containers and remove volumes (DANGEROUS: deletes data)
-	$(DC) down -v
+	$(DC_DEV) down -v
 
 # -----------------------
 # Local go helpers (per-service)
@@ -177,3 +203,18 @@ prune-images: ## Remove dangling docker images
 .PHONY: system-prune
 system-prune: ## Dangerous: prune docker system (images, containers, volumes). USE WITH CAUTION.
 	docker system prune -a --volumes
+
+.PHONY: diagnose
+diagnose: ## Diagnose project structure
+	@echo "=== Project Structure Diagnosis ==="
+	@echo "Current directory: $$(pwd)"
+	@echo ""
+	@echo "Services directory contents:"
+	@ls -la services/ 2>/dev/null || echo "services/ directory not found"
+	@echo ""
+	@echo "Checking specific paths:"
+	@test -f services/auth/main.go && echo "✓ services/auth/main.go exists" || echo "✗ services/auth/main.go not found"
+	@test -f services/api-gateway/main.go && echo "✓ services/api-gateway/main.go exists" || echo "✗ services/api-gateway/main.go not found"
+	@echo ""
+	@echo "All main.go files:"
+	@find . -name "main.go" -type f | grep -v vendor | grep -v tmp

@@ -1,0 +1,45 @@
+services:
+  api-gateway:
+    build:
+      context: ../..
+      dockerfile: services/api-gateway/Dockerfile.dev
+    container_name: remaster-api-gateway-dev
+    volumes:
+      - ../..:/app
+      - /app/tmp
+      - go_modules_cache:/go/pkg/mod
+    environment:
+      - GO_ENV=development
+    restart: "no"
+    develop:
+      watch:
+        - action: sync
+          path: ../../services/api-gateway
+          target: /app/services/api-gateway
+        - action: sync
+          path: ../../shared
+          target: /app/shared
+
+  auth-service:
+    build:
+      context: ../..
+      dockerfile: services/auth/Dockerfile.dev
+    container_name: remaster-auth-service-dev
+    volumes:
+      - ../..:/app
+      - /app/tmp
+      - go_modules_cache:/go/pkg/mod
+    environment:
+      - GO_ENV=development
+    restart: "no"
+    develop:
+      watch:
+        - action: sync
+          path: ../../services/auth
+          target: /app/services/auth
+        - action: sync
+          path: ../../shared
+          target: /app/shared
+
+volumes:
+  go_modules_cache:
