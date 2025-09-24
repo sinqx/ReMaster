@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"remaster/shared/logger"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -25,19 +24,17 @@ func NewErrorHandler(logger *slog.Logger) *ErrorHandler {
 
 // Response structure HTTP
 type ErrorResponse struct {
-	Success bool              `json:"success"`
-	Error   string            `json:"error"`
-	Code    string            `json:"code"`
-	Details map[string]string `json:"details,omitempty"`
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+	Code    string `json:"code"`
+	Details any    `json:"details,omitempty"`
 }
 
 // ---- HTTP error handling ----
 func (eh *ErrorHandler) HandleGinError(c *gin.Context, err error) {
-	requestLogger := logger.FromContext(c.Request.Context(), eh.logger)
-
 	appErr, ok := err.(*AppError)
 	if !ok {
-		eh.logError(c.Request.Context(), requestLogger, err)
+		eh.logError(c.Request.Context(), eh.logger, err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Success: false,
 			Error:   "Internal server error",
@@ -46,7 +43,7 @@ func (eh *ErrorHandler) HandleGinError(c *gin.Context, err error) {
 		return
 	}
 
-	eh.logError(c.Request.Context(), requestLogger, appErr)
+	eh.logError(c.Request.Context(), eh.logger, appErr)
 	c.JSON(appErr.StatusCode, ErrorResponse{
 		Success: false,
 		Error:   appErr.Message,
@@ -68,37 +65,49 @@ func (eh *ErrorHandler) HandleGrpcError(err error) error {
 func (eh *ErrorHandler) HandleHttpError(c *gin.Context, err error) {
 	var appErr *AppError
 	if errors.As(err, &appErr) {
-		c.JSON(appErr.StatusCode, ErrorResponse{
+		eh.logError(c.Request.Context(), eh.logger, err)
+
+		response := ErrorResponse{
 			Success: false,
 			Error:   appErr.Message,
 			Code:    appErr.Code,
 			Details: appErr.Details,
-		})
+		}
+
+		c.JSON(appErr.StatusCode, response)
 		return
 	}
 
-	// fallback
-	c.JSON(http.StatusInternalServerError, ErrorResponse{
+	eh.logger.ErrorContext(c.Request.Context(),
+		"Unknown error occurred",
+		slog.Any("error", err),
+	)
+
+	response := ErrorResponse{
 		Success: false,
 		Error:   "Internal server error",
 		Code:    "INTERNAL_ERROR",
-	})
+	}
+
+	c.JSON(http.StatusInternalServerError, response)
 }
 
 // ---- gRPC → HTTP (для API Gateway) ----
 func (eh *ErrorHandler) HandleGrpcToHttp(c *gin.Context, err error) {
-	requestLogger := logger.FromContext(c.Request.Context(), eh.logger)
-
 	st, ok := status.FromError(err)
 	if !ok {
-		requestLogger.ErrorContext(c.Request.Context(), "failed to convert gRPC error to status",
-			slog.Any("error", err))
+		eh.logger.ErrorContext(c.Request.Context(),
+			"failed to convert gRPC error to status",
+			slog.Any("error", err),
+		)
 
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		resp := ErrorResponse{
 			Success: false,
 			Error:   "Internal server error",
 			Code:    "INTERNAL_ERROR",
-		})
+		}
+
+		c.JSON(http.StatusInternalServerError, resp)
 		return
 	}
 
@@ -109,6 +118,7 @@ func (eh *ErrorHandler) HandleGrpcToHttp(c *gin.Context, err error) {
 		Code:    st.Code().String(),
 	}
 
+	details := make(map[string]any)
 	for _, d := range st.Details() {
 		switch info := d.(type) {
 		case *errdetails.ErrorInfo:
@@ -116,10 +126,41 @@ func (eh *ErrorHandler) HandleGrpcToHttp(c *gin.Context, err error) {
 				resp.Code = info.Reason
 			}
 			if len(info.Metadata) > 0 {
-				resp.Details = info.Metadata
+				for k, v := range info.Metadata {
+					details[k] = v
+				}
 			}
+		case *errdetails.BadRequest:
+			violations := make(map[string]string)
+			for _, violation := range info.FieldViolations {
+				violations[violation.Field] = violation.Description
+			}
+			if len(violations) > 0 {
+				details["field_violations"] = violations
+			}
+		case *errdetails.ResourceInfo:
+			details["resource_type"] = info.ResourceType
+			details["resource_name"] = info.ResourceName
 		}
 	}
+
+	if len(details) > 0 {
+		resp.Details = details
+	}
+
+	logLevel := slog.LevelInfo
+	if httpStatus >= 500 {
+		logLevel = slog.LevelError
+	} else if httpStatus >= 400 {
+		logLevel = slog.LevelWarn
+	}
+
+	eh.logger.Log(c.Request.Context(), logLevel,
+		"gRPC error converted to HTTP",
+		slog.String("grpc_code", st.Code().String()),
+		slog.Int("http_status", httpStatus),
+		slog.String("message", st.Message()),
+	)
 
 	c.JSON(httpStatus, resp)
 }
