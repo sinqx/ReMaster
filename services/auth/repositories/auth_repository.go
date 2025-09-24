@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	models "remaster/services/auth/models"
 	et "remaster/shared/errors"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -33,19 +35,16 @@ func NewAuthRepository(db *mongo.Database, logger *slog.Logger) *authRepositoryI
 type AuthRepositoryInterface interface {
 	// User operations
 	Create(ctx context.Context, user *models.User) error
-	// GetByID(ctx context.Context, id string) (*models.User, error)
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
+	UpdateLoginInfo(ctx context.Context, userID primitive.ObjectID, ipAddress string) error
+	LockUserAccount(ctx context.Context, userID primitive.ObjectID, duration time.Duration) error
 
 	// Refresh token operations
 	SaveRefreshToken(ctx context.Context, token *models.RefreshToken) error
-	// GetRefreshToken(ctx context.Context, token string) (*models.RefreshToken, error)
-	// RevokeRefreshToken(ctx context.Context, token string) error
-	// RevokeAllUserRefreshTokens(ctx context.Context, userID string) error
-	// CleanExpiredTokens(ctx context.Context) error
 
 	// Login attempts
-	// SaveLoginAttempt(ctx context.Context, attempt *models.LoginAttempt) error
-	// GetLoginAttempts(ctx context.Context, email string, since time.Time) ([]*models.LoginAttempt, error)
+	IncrementLoginAttempts(ctx context.Context, userID primitive.ObjectID) (int, error)
+	ResetLoginAttempts(ctx context.Context, userID primitive.ObjectID) error
 
 	// Utility
 	EnsureIndexes(ctx context.Context) error
@@ -92,11 +91,8 @@ func (r *authRepositoryImpl) GetByEmail(ctx context.Context, email string) (*mod
 }
 
 func (r *authRepositoryImpl) SaveRefreshToken(ctx context.Context, token *models.RefreshToken) error {
-	opts := options.Update().SetUpsert(true)
-	filter := bson.M{"user_id": token.UserID}
-	update := bson.M{"$set": token}
-
-	_, err := r.refreshTokensCol.UpdateOne(ctx, filter, update, opts)
+	token.ID = primitive.NewObjectID()
+	_, err := r.refreshTokensCol.InsertOne(ctx, token)
 	if err != nil {
 		return fmt.Errorf("failed to save refresh token: %w", err)
 	}
@@ -121,4 +117,40 @@ func (r *authRepositoryImpl) IsUniqueConstraintError(err error) bool {
 		}
 	}
 	return false
+}
+
+func (r *authRepositoryImpl) UpdateLoginInfo(ctx context.Context, userID primitive.ObjectID, ipAddress string) error {
+	update := bson.M{
+		"$set": bson.M{
+			"last_login_at": time.Now(),
+			"last_login_ip": ipAddress,
+		},
+	}
+	_, err := r.usersCol.UpdateByID(ctx, userID, update)
+	return err
+}
+
+func (r *authRepositoryImpl) LockUserAccount(ctx context.Context, userID primitive.ObjectID, duration time.Duration) error {
+	lockedUntil := time.Now().Add(duration)
+	update := bson.M{"$set": bson.M{"locked_until": lockedUntil}}
+	_, err := r.usersCol.UpdateByID(ctx, userID, update)
+	return err
+}
+
+func (r *authRepositoryImpl) IncrementLoginAttempts(ctx context.Context, userID primitive.ObjectID) (int, error) {
+	update := bson.M{"$inc": bson.M{"login_attempts": 1}}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+
+	var updatedUser models.User
+	err := r.usersCol.FindOneAndUpdate(ctx, bson.M{"_id": userID}, update, opts).Decode(&updatedUser)
+	if err != nil {
+		return 0, err
+	}
+	return updatedUser.LoginAttempts, nil
+}
+
+func (r *authRepositoryImpl) ResetLoginAttempts(ctx context.Context, userID primitive.ObjectID) error {
+	update := bson.M{"$set": bson.M{"login_attempts": 0}, "$unset": bson.M{"locked_until": ""}}
+	_, err := r.usersCol.UpdateByID(ctx, userID, update)
+	return err
 }

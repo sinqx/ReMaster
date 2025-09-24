@@ -39,9 +39,10 @@ type User struct {
 	LastLoginAt     *time.Time `bson:"last_login_at,omitempty" json:"last_login_at,omitempty"`
 	EmailVerifiedAt *time.Time `bson:"email_verified_at,omitempty" json:"email_verified_at,omitempty"`
 
-	LoginAttempts    int       `bson:"login_attempts" json:"login_attempts"`
-	LastLoginIP      string    `bson:"last_login_ip,omitempty" json:"last_login_ip,omitempty"`
-	PasswordChangeAt time.Time `bson:"password_changed_at" json:"password_changed_at"`
+	LoginAttempts    int        `bson:"login_attempts" json:"login_attempts"`
+	LastLoginIP      string     `bson:"last_login_ip,omitempty" json:"last_login_ip,omitempty"`
+	PasswordChangeAt time.Time  `bson:"password_changed_at" json:"password_changed_at"`
+	LockedUntil      *time.Time `bson:"locked_until,omitempty" json:"locked_until,omitempty"`
 }
 
 type RefreshToken struct {
