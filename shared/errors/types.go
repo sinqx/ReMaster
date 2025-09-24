@@ -92,6 +92,10 @@ func NewRateLimitError(msg string) *AppError {
 	return NewAppError(ErrorTypeRateLimit, "RATE_LIMIT_EXCEEDED", msg, http.StatusTooManyRequests, nil, nil)
 }
 
+func NewPermissionError(msg string) *AppError {
+	return NewAppError(ErrorTypeForbidden, "PERMISSION_ERROR", msg, http.StatusForbidden, nil, nil)
+}
+
 // -------- Mapping --------
 
 func (et ErrorType) String() string {
