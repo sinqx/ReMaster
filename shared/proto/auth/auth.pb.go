@@ -287,8 +287,6 @@ type LoginResponse struct {
 	UserType      string                 `protobuf:"bytes,7,opt,name=user_type,json=userType,proto3" json:"user_type,omitempty"`
 	IsActive      bool                   `protobuf:"varint,8,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
 	IsVerified    bool                   `protobuf:"varint,9,opt,name=is_verified,json=isVerified,proto3" json:"is_verified,omitempty"`
-	LastLoginAt   *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=last_login_at,json=lastLoginAt,proto3" json:"last_login_at,omitempty"`
-	ProfileImage  string                 `protobuf:"bytes,11,opt,name=profile_image,json=profileImage,proto3" json:"profile_image,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -384,20 +382,6 @@ func (x *LoginResponse) GetIsVerified() bool {
 		return x.IsVerified
 	}
 	return false
-}
-
-func (x *LoginResponse) GetLastLoginAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LastLoginAt
-	}
-	return nil
-}
-
-func (x *LoginResponse) GetProfileImage() string {
-	if x != nil {
-		return x.ProfileImage
-	}
-	return ""
 }
 
 // Tokern refresh
@@ -1196,7 +1180,7 @@ const file_auth_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"@\n" +
 	"\fLoginRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x83\x03\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x9e\x02\n" +
 	"\rLoginResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x17\n" +
@@ -1208,10 +1192,7 @@ const file_auth_proto_rawDesc = "" +
 	"\tuser_type\x18\a \x01(\tR\buserType\x12\x1b\n" +
 	"\tis_active\x18\b \x01(\bR\bisActive\x12\x1f\n" +
 	"\vis_verified\x18\t \x01(\bR\n" +
-	"isVerified\x12>\n" +
-	"\rlast_login_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\vlastLoginAt\x12#\n" +
-	"\rprofile_image\x18\v \x01(\tR\fprofileImage\":\n" +
+	"isVerified\":\n" +
 	"\x13RefreshTokenRequest\x12#\n" +
 	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\"\xec\x01\n" +
 	"\x14RefreshTokenResponse\x12\x18\n" +
@@ -1318,33 +1299,32 @@ var file_auth_proto_goTypes = []any{
 }
 var file_auth_proto_depIdxs = []int32{
 	17, // 0: auth.RegisterResponse.created_at:type_name -> google.protobuf.Timestamp
-	17, // 1: auth.LoginResponse.last_login_at:type_name -> google.protobuf.Timestamp
-	17, // 2: auth.RefreshTokenResponse.created_at:type_name -> google.protobuf.Timestamp
-	17, // 3: auth.ValidateTokenResponse.last_login_at:type_name -> google.protobuf.Timestamp
-	17, // 4: auth.ChangePasswordResponse.password_changed_at:type_name -> google.protobuf.Timestamp
-	17, // 5: auth.HealthResponse.timestamp:type_name -> google.protobuf.Timestamp
-	16, // 6: auth.HealthResponse.checks:type_name -> auth.HealthResponse.ChecksEntry
-	0,  // 7: auth.AuthService.Registration:input_type -> auth.RegisterRequest
-	2,  // 8: auth.AuthService.Login:input_type -> auth.LoginRequest
-	4,  // 9: auth.AuthService.RefreshToken:input_type -> auth.RefreshTokenRequest
-	6,  // 10: auth.AuthService.ValidateToken:input_type -> auth.ValidateTokenRequest
-	8,  // 11: auth.AuthService.Logout:input_type -> auth.LogoutRequest
-	10, // 12: auth.AuthService.ChangePassword:input_type -> auth.ChangePasswordRequest
-	12, // 13: auth.AuthService.GoogleLogin:input_type -> auth.GoogleLoginRequest
-	14, // 14: auth.AuthService.Health:input_type -> auth.HealthRequest
-	1,  // 15: auth.AuthService.Registration:output_type -> auth.RegisterResponse
-	3,  // 16: auth.AuthService.Login:output_type -> auth.LoginResponse
-	5,  // 17: auth.AuthService.RefreshToken:output_type -> auth.RefreshTokenResponse
-	7,  // 18: auth.AuthService.ValidateToken:output_type -> auth.ValidateTokenResponse
-	9,  // 19: auth.AuthService.Logout:output_type -> auth.LogoutResponse
-	11, // 20: auth.AuthService.ChangePassword:output_type -> auth.ChangePasswordResponse
-	13, // 21: auth.AuthService.GoogleLogin:output_type -> auth.GoogleLoginResponse
-	15, // 22: auth.AuthService.Health:output_type -> auth.HealthResponse
-	15, // [15:23] is the sub-list for method output_type
-	7,  // [7:15] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	17, // 1: auth.RefreshTokenResponse.created_at:type_name -> google.protobuf.Timestamp
+	17, // 2: auth.ValidateTokenResponse.last_login_at:type_name -> google.protobuf.Timestamp
+	17, // 3: auth.ChangePasswordResponse.password_changed_at:type_name -> google.protobuf.Timestamp
+	17, // 4: auth.HealthResponse.timestamp:type_name -> google.protobuf.Timestamp
+	16, // 5: auth.HealthResponse.checks:type_name -> auth.HealthResponse.ChecksEntry
+	0,  // 6: auth.AuthService.Registration:input_type -> auth.RegisterRequest
+	2,  // 7: auth.AuthService.Login:input_type -> auth.LoginRequest
+	4,  // 8: auth.AuthService.RefreshToken:input_type -> auth.RefreshTokenRequest
+	6,  // 9: auth.AuthService.ValidateToken:input_type -> auth.ValidateTokenRequest
+	8,  // 10: auth.AuthService.Logout:input_type -> auth.LogoutRequest
+	10, // 11: auth.AuthService.ChangePassword:input_type -> auth.ChangePasswordRequest
+	12, // 12: auth.AuthService.GoogleLogin:input_type -> auth.GoogleLoginRequest
+	14, // 13: auth.AuthService.Health:input_type -> auth.HealthRequest
+	1,  // 14: auth.AuthService.Registration:output_type -> auth.RegisterResponse
+	3,  // 15: auth.AuthService.Login:output_type -> auth.LoginResponse
+	5,  // 16: auth.AuthService.RefreshToken:output_type -> auth.RefreshTokenResponse
+	7,  // 17: auth.AuthService.ValidateToken:output_type -> auth.ValidateTokenResponse
+	9,  // 18: auth.AuthService.Logout:output_type -> auth.LogoutResponse
+	11, // 19: auth.AuthService.ChangePassword:output_type -> auth.ChangePasswordResponse
+	13, // 20: auth.AuthService.GoogleLogin:output_type -> auth.GoogleLoginResponse
+	15, // 21: auth.AuthService.Health:output_type -> auth.HealthResponse
+	14, // [14:22] is the sub-list for method output_type
+	6,  // [6:14] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_auth_proto_init() }

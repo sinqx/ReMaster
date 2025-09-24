@@ -56,8 +56,6 @@ message LoginResponse {
   string user_type = 7;
   bool is_active = 8;
   bool is_verified = 9;
-  google.protobuf.Timestamp last_login_at = 10;
-  string profile_image = 11;
 }
 
 // Tokern refresh
