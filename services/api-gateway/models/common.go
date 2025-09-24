@@ -1,14 +1,20 @@
 package models
 
-type Envelope struct {
-	Success bool   `json:"success"`
-	Message string `json:"message,omitempty"`
-	Code    string `json:"code,omitempty"`
-	Data    any    `json:"data,omitempty"`
+
+type BaseResponse struct {
+	Success   bool   `json:"success"`
+	Message   string `json:"message,omitempty"`
+	Timestamp int64  `json:"timestamp"`
 }
 
 type SuccessResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message,omitempty"`
-	Data    any    `json:"data,omitempty"`
+	BaseResponse
+	Data any `json:"data,omitempty"`
+}
+
+type ErrorResponse struct {
+	BaseResponse
+	Error   string `json:"error"`
+	Code    string `json:"code"`
+	Details any    `json:"details,omitempty"`
 }

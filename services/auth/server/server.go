@@ -69,11 +69,6 @@ func (s *Server) Start() error {
 		return fmt.Errorf("failed to get gRPC address: %w", err)
 	}
 
-	s.Logger.Info("Created API Gateway server",
-		"environment", s.Config.App.Environment,
-		"http_port", s.Config.HTTP.Port,
-	)
-
 	s.Logger.Info("Creating server for", "service", s.Name, "grpc_address", grpcAddr)
 
 	ctx, cancel := context.WithCancel(context.Background())

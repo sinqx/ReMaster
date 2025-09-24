@@ -16,19 +16,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func CorrelationID() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		correlationID := c.GetHeader("X-Correlation-ID")
-		if correlationID == "" {
-			correlationID = uuid.New().String()
-		}
-
-		c.Header("X-Correlation-ID", correlationID)
-		c.Set("correlation_id", correlationID)
-		c.Next()
-	}
-}
-
 func RequestLogger(baseLogger *slog.Logger, eh *errors.ErrorHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()

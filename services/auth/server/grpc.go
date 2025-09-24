@@ -87,7 +87,7 @@ func (s *Server) startGRPCServer(ctx context.Context, grpcAddr string) error {
 		}
 	}()
 
-	s.Logger.Info("gRPC server starting to listen")
+	s.Logger.Info("Auth gRPC server started successfully")
 
 	// Start the server
 	if err := s.grpcServer.Serve(lis); err != nil {

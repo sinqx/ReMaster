@@ -56,7 +56,7 @@ func (s *Server) Start() error {
 
 	s.Logger.Info("Creating API Gateway server",
 		"environment", s.Config.App.Environment,
-		"http_port", s.Config.HTTP.Port,
+		"HTTP port", s.Config.HTTP.Port,
 	)
 
 	// Initialize components
