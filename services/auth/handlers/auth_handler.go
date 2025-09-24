@@ -30,8 +30,8 @@ func NewAuthHandler(authService *services.AuthService, logger *slog.Logger) *Aut
 	}
 }
 
-func (c *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
-	c.logger.Info("Registration request", "email", req.Email)
+func (h *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
+	h.logger.Info("Registration request", "email", req.Email)
 
 	metadata := extractRequestMetadata(ctx)
 
@@ -44,13 +44,13 @@ func (c *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest)
 		UserType:  models.UserType(req.UserType),
 	}
 
-	resp, err := c.authService.CreateUser(ctx, registerReq, metadata)
+	resp, err := h.authService.CreateUser(ctx, registerReq, metadata)
 	if err != nil {
-		c.logger.Error("Registration failed", "error", err, "email", req.Email)
+		h.logger.Error("Registration failed", "error", err, "email", req.Email)
 		return &pb.RegisterResponse{
 			Success: false,
 			Message: err.Error(),
-		}, c.errorHandler.HandleGrpcError(err)
+		}, h.errorHandler.HandleGrpcError(err)
 	}
 
 	pbResp := &pb.RegisterResponse{
@@ -66,7 +66,43 @@ func (c *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest)
 		CreatedAt:    timestamppb.New(resp.User.CreatedAt),
 	}
 
-	c.logger.Info("User registered successfully:", req.Email, resp.User.ID)
+	h.logger.Info("User registered successfully:", req.Email, resp.User.ID)
+
+	return pbResp, nil
+}
+
+func (h *AuthHandler) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
+	h.logger.Info("Login request", "email", req.Email)
+
+	metadata := extractRequestMetadata(ctx)
+
+	loginReq := &models.LoginRequest{
+		Email:    req.Email,
+		Password: req.Password,
+	}
+
+	resp, err := h.authService.AuthenticateUser(ctx, loginReq, metadata)
+	if err != nil {
+		h.logger.Error("Login failed", "error", err, "email", req.Email)
+		return &pb.LoginResponse{
+			Success: false,
+			Message: err.Error(),
+		}, h.errorHandler.HandleGrpcError(err)
+	}
+
+	pbResp := &pb.LoginResponse{
+		Success:      true,
+		Message:      "Login successful",
+		UserId:       resp.User.ID,
+		AccessToken:  resp.AccessToken,
+		RefreshToken: resp.RefreshToken,
+		ExpiresAt:    resp.ExpiresAt,
+		UserType:     string(resp.User.UserType),
+		IsActive:     resp.User.IsActive,
+		IsVerified:   resp.User.IsVerified,
+	}
+
+	h.logger.Info("User logged in successfully:", req.Email, resp.User.ID)
 
 	return pbResp, nil
 }

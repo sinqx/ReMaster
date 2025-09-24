@@ -122,3 +122,63 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 		TokenType:    "Bearer",
 	}, nil
 }
+
+func (s *AuthService) AuthenticateUser(ctx context.Context, req *models.LoginRequest, metadata *models.RequestMetadata) (*models.AuthResponse, error) {
+	user, err := s.repo.GetByEmail(ctx, req.Email)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, et.NewUnauthorizedError("invalid email or password")
+		}
+		return nil, et.NewDatabaseError("failed to fetch user", err)
+	}
+
+	if user.LockedUntil != nil && time.Now().Before(*user.LockedUntil) {
+		return nil, et.NewPermissionError("account is locked, please try again later")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		attempts, _ := s.repo.IncrementLoginAttempts(ctx, user.ID)
+		if attempts >= MaxLoginAttempts {
+			_ = s.repo.LockUserAccount(ctx, user.ID, LockoutDuration)
+		}
+		return nil, et.NewUnauthorizedError("invalid email or password")
+	}
+
+	if user.LoginAttempts > 0 {
+		_ = s.repo.ResetLoginAttempts(ctx, user.ID)
+	}
+
+	_ = s.repo.UpdateLoginInfo(ctx, user.ID, metadata.IPAddress)
+
+	accessToken, err := s.jwtUtils.GenerateAccessToken(user.ID.Hex(), user.Email, string(user.UserType))
+	if err != nil {
+		return nil, et.NewInternalError("failed to generate access token", err)
+	}
+	refreshToken, err := s.jwtUtils.GenerateRefreshToken()
+	if err != nil {
+		return nil, et.NewInternalError("failed to generate refresh token", err)
+	}
+
+	tokenModel := &models.RefreshToken{
+		UserID:    user.ID,
+		Token:     refreshToken,
+		ExpiresAt: time.Now().Add(s.jwtUtils.RefreshTokenTTL),
+		CreatedAt: time.Now(),
+		IsRevoked: false,
+		DeviceID:  metadata.DeviceID,
+		UserAgent: metadata.UserAgent,
+		IP:        metadata.IPAddress,
+	}
+
+	if err := s.repo.SaveRefreshToken(ctx, tokenModel); err != nil {
+		return nil, et.NewDatabaseError("failed to save refresh token", err)
+	}
+
+	return &models.AuthResponse{
+		User:         user.ToResponse(),
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresAt:    time.Now().Add(s.jwtUtils.AccessTokenTTL).Unix(),
+		TokenType:    "Bearer",
+	}, nil
+}

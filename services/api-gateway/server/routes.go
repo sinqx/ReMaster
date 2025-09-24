@@ -35,6 +35,7 @@ func (s *Server) setupAuthRoutes() {
 	authHandler := handlers.NewAuthHandler(s.authClient, s.Logger, s.errorHandler)
 
 	auth.POST("/register", authHandler.Register)
+	auth.POST("/login", authHandler.Login)
 
 	s.Logger.Debug("Auth routes registered")
 }
