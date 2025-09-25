@@ -72,7 +72,7 @@ func NewInternalError(msg string, cause error) *AppError {
 	return NewAppError(ErrorTypeInternal, "INTERNAL_ERROR", msg, http.StatusInternalServerError, cause, nil)
 }
 
-func NewNotFoundError(msg string) *AppError {
+func NewNotFoundError(msg string, cause error) *AppError {
 	return NewAppError(ErrorTypeNotFound, "NOT_FOUND", msg, http.StatusNotFound, nil, nil)
 }
 
