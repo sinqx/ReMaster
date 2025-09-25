@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc"
 
 	"remaster/services/auth/handlers"
-	oauth "remaster/services/auth/oAuth"
+	oauth "remaster/services/auth/oauth"
 	"remaster/services/auth/repositories"
 	"remaster/services/auth/services"
 	"remaster/services/auth/utils"
@@ -37,10 +37,10 @@ func NewServer(config *cfg.Config, logger *slog.Logger, mongoMgr *connection.Mon
 
 	serviceLogger := logger.With(slog.String("service", serviceName))
 	jwtUtils := utils.NewJWTUtils(&config.JWT)
-	googleAuthClient := oauth.NewGoogleAuthClient(&config.OAuth)
+	oauthFactory := oauth.NewProviderFactory(&config.OAuth)
 
 	authRepo := repositories.NewAuthRepository(mongoMgr.GetDatabase(), serviceLogger)
-	authService := services.NewAuthService(authRepo, redisMgr, googleAuthClient, jwtUtils)
+	authService := services.NewAuthService(authRepo, redisMgr, oauthFactory, jwtUtils)
 	authHandler := handlers.NewAuthHandler(authService, serviceLogger)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

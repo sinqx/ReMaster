@@ -1,18 +1,18 @@
 syntax = "proto3";
 
 package auth;
-option go_package = "remaster/shared/proto/auth";
+option go_package = "remaster/shared/proto//auth";
 
 import "google/protobuf/timestamp.proto";
 
 service AuthService {
   rpc Registration(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
+  rpc OAuthLogin(OAuthLoginRequest) returns (OAuthLoginResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
   rpc Logout(LogoutRequest) returns (LogoutResponse);
   rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
-  rpc GoogleLogin(GoogleLoginRequest) returns (GoogleLoginResponse);
   rpc Health(HealthRequest) returns (HealthResponse);
 }
 
@@ -113,22 +113,20 @@ message ChangePasswordResponse {
   google.protobuf.Timestamp password_changed_at = 3;
 }
 
-// Google OAuth
-message GoogleLoginRequest {
-  string google_token = 1;
-  string user_type = 2;
+// OAuth
+message OAuthLoginRequest {
+  string provider = 1;
+  string id_token = 2;
 }
 
-message GoogleLoginResponse {
+message OAuthLoginResponse {
   bool success = 1;
   string message = 2;
   string user_id = 3;
   string access_token = 4;
   string refresh_token = 5;
   int64 expires_at = 6;
-  bool is_new_user = 7;
-  string google_email = 8;
-  string profile_image = 9;
+  string user_type = 7;
 }
 
 message HealthRequest {}

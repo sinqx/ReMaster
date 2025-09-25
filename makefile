@@ -34,15 +34,18 @@ proto-gen: ## Generate protobuf Go code into $(GEN_DIR). Requires protoc and pro
 	@echo "Generating protobuf files from '$(PROTO_DIR)' → '$(GEN_DIR)' ..."
 	@rm -rf $(GEN_DIR)
 	@mkdir -p $(GEN_DIR)
-	@FILES="$$(find $(PROTO_DIR) -name '*.proto' -print)"; \
-	if [ -z "$${FILES}" ]; then \
-		echo "No .proto files found in $(PROTO_DIR)"; \
-		exit 1; \
-	fi; \
-	$(PROTOC) --proto_path=$(PROTO_DIR) \
-		--go_out=$(GEN_DIR) --go_opt=paths=source_relative \
-		--go-grpc_out=$(GEN_DIR) --go-grpc_opt=paths=source_relative \
-		$${FILES}
+
+	@for file in $(PROTO_DIR)/*.proto; do \
+		base=$$(basename $$file .proto); \
+		outdir=$(GEN_DIR)/$$base; \
+		mkdir -p $$outdir; \
+		protoc --proto_path=$(PROTO_DIR) \
+			--go_out=$$outdir --go_opt=paths=source_relative \
+			--go-grpc_out=$$outdir --go-grpc_opt=paths=source_relative \
+			$$file; \
+		echo "Generated $$file → $$outdir"; \
+	done
+
 	@echo "Protobuf generation completed."
 
 .PHONY: proto-clean
@@ -137,7 +140,7 @@ shell: ## Open interactive shell in a running container, usage: make shell SERVI
 
 .PHONY: clean
 clean: ## Stop containers and remove volumes (DANGEROUS: deletes data)
-	$(DC_DEV) down -v
+	docker system prune -a
 
 # -----------------------
 # Local go helpers (per-service)
