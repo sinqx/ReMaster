@@ -12,7 +12,6 @@ import (
 
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type AuthHandler struct {
@@ -63,7 +62,6 @@ func (h *AuthHandler) Registration(ctx context.Context, req *pb.RegisterRequest)
 		UserType:     string(resp.User.UserType),
 		IsActive:     resp.User.IsActive,
 		IsVerified:   resp.User.IsVerified,
-		CreatedAt:    timestamppb.New(resp.User.CreatedAt),
 	}
 
 	h.logger.Info("User registered successfully:", req.Email, resp.User.ID)
@@ -105,6 +103,34 @@ func (h *AuthHandler) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Logi
 	h.logger.Info("User logged in successfully:", req.Email, resp.User.ID)
 
 	return pbResp, nil
+}
+
+func (h *AuthHandler) OAuthLogin(ctx context.Context, req *pb.OAuthLoginRequest) (*pb.OAuthLoginResponse, error) {
+	h.logger.Info("OAuth login request", "provider", req.Provider)
+
+	oauthReq := &models.OAuthLoginRequest{
+		Provider: req.Provider,
+		IDToken:  req.IdToken,
+	}
+
+	resp, err := h.authService.OAuthLogin(ctx, oauthReq)
+	if err != nil {
+		h.logger.Error("OAuth login failed", "provider", req.Provider, "error", err)
+		return &pb.OAuthLoginResponse{
+			Success: false,
+			Message: err.Error(),
+		}, h.errorHandler.HandleGrpcError(err)
+	}
+
+	return &pb.OAuthLoginResponse{
+		Success:      true,
+		Message:      "OAuth login successful",
+		UserId:       resp.User.ID,
+		AccessToken:  resp.AccessToken,
+		RefreshToken: resp.RefreshToken,
+		ExpiresAt:    resp.ExpiresAt,
+		UserType:     string(resp.User.UserType),
+	}, nil
 }
 
 func extractRequestMetadata(ctx context.Context) *models.RequestMetadata {

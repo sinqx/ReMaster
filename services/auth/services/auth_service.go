@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"remaster/services/auth/models"
-	oauth "remaster/services/auth/oAuth"
+	oauth "remaster/services/auth/oauth"
 	repo "remaster/services/auth/repositories"
 	"remaster/services/auth/utils"
 	conn "remaster/shared/connection"
@@ -25,9 +25,9 @@ const (
 )
 
 type AuthService struct {
-	repo       repo.AuthRepositoryInterface
-	redisMgr   *conn.RedisManager
-	googleAuth *oauth.GoogleAuthClient
+	repo         repo.AuthRepositoryInterface
+	redisMgr     *conn.RedisManager
+	oauthFactory *oauth.ProviderFactory
 	// oauthConfig *config.OAuthConfig
 	jwtUtils *utils.JWTUtils
 }
@@ -35,15 +35,15 @@ type AuthService struct {
 func NewAuthService(
 	userRepo repo.AuthRepositoryInterface,
 	redisMgr *conn.RedisManager,
-	googleAuth *oauth.GoogleAuthClient,
+	oauthFactory *oauth.ProviderFactory,
 	jwtUtils *utils.JWTUtils,
 
 ) *AuthService {
 	return &AuthService{
-		repo:       userRepo,
-		redisMgr:   redisMgr,
-		googleAuth: googleAuth,
-		jwtUtils:   jwtUtils,
+		repo:         userRepo,
+		redisMgr:     redisMgr,
+		oauthFactory: oauthFactory,
+		jwtUtils:     jwtUtils,
 	}
 }
 
@@ -172,6 +172,65 @@ func (s *AuthService) AuthenticateUser(ctx context.Context, req *models.LoginReq
 
 	if err := s.repo.SaveRefreshToken(ctx, tokenModel); err != nil {
 		return nil, et.NewDatabaseError("failed to save refresh token", err)
+	}
+
+	return &models.AuthResponse{
+		User:         user.ToResponse(),
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresAt:    time.Now().Add(s.jwtUtils.AccessTokenTTL).Unix(),
+		TokenType:    "Bearer",
+	}, nil
+}
+
+func (s *AuthService) OAuthLogin(ctx context.Context, req *models.OAuthLoginRequest) (*models.AuthResponse, error) {
+	provider, err := s.oauthFactory.GetProvider(oauth.ProviderType(req.Provider))
+	if err != nil {
+		return nil, et.NewInternalError("invalid oauth provider", err)
+	}
+
+	claims, err := provider.VerifyIDToken(ctx, req.IDToken)
+	if err != nil {
+		return nil, et.NewUnauthorizedError(err.Error())
+	}
+
+	user, err := s.repo.GetByEmail(ctx, claims.Email)
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, et.NewDatabaseError("failed to find user", err)
+	}
+
+	if user == nil {
+		user = &models.User{
+			Email:        claims.Email,
+			FirstName:    claims.FirstName,
+			LastName:     claims.LastName,
+			ProfileImage: claims.Picture,
+			UserType:     models.UserTypeClient,
+			IsVerified:   true,
+			IsActive:     true,
+		}
+
+		if err := s.repo.Create(ctx, user); err != nil {
+			return nil, et.NewDatabaseError("failed to create user", err)
+		}
+	}
+
+	accessToken, err := s.jwtUtils.GenerateAccessToken(user.ID.Hex(), user.Email, string(user.UserType))
+	if err != nil {
+		return nil, err
+	}
+	refreshToken, err := s.jwtUtils.GenerateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.SaveRefreshToken(ctx, &models.RefreshToken{
+		UserID:    user.ID,
+		Token:     refreshToken,
+		ExpiresAt: time.Now().Add(s.jwtUtils.RefreshTokenTTL),
+		CreatedAt: time.Now(),
+	}); err != nil {
+		return nil, err
 	}
 
 	return &models.AuthResponse{
