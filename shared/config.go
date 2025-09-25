@@ -81,6 +81,8 @@ type OAuthConfig struct {
 	GoogleClientID     string `mapstructure:"google_client_id" validate:"required"`
 	GoogleClientSecret string `mapstructure:"google_client_secret" validate:"required"`
 	GoogleRedirectURL  string `mapstructure:"google_redirect_url" validate:"required,url"`
+	FacebookAppID      string `mapstructure:"facebook_app_id" validate:"required"` // NOTE: not tested
+	FacebookAppSecret  string `mapstructure:"facebook_app_secret" validate:"required"` // never used facebook :)
 }
 
 type AWSConfig struct {

@@ -44,11 +44,6 @@ jwt:
   issuer: remaster-auth
   audience: remaster-users
 
-oauth:
-  google_client_id: id
-  google_client_secret: secret
-  google_redirect_url: http://localhost:8080/auth/google/callback
-
 aws:
   endpoint: http://minio:9000
   region: us-east-1

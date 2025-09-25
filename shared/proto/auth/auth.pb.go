@@ -892,29 +892,29 @@ func (x *ChangePasswordResponse) GetPasswordChangedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-// Google OAuth
-type GoogleLoginRequest struct {
+// OAuth
+type OAuthLoginRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	GoogleToken   string                 `protobuf:"bytes,1,opt,name=google_token,json=googleToken,proto3" json:"google_token,omitempty"`
-	UserType      string                 `protobuf:"bytes,2,opt,name=user_type,json=userType,proto3" json:"user_type,omitempty"`
+	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	IdToken       string                 `protobuf:"bytes,2,opt,name=id_token,json=idToken,proto3" json:"id_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GoogleLoginRequest) Reset() {
-	*x = GoogleLoginRequest{}
+func (x *OAuthLoginRequest) Reset() {
+	*x = OAuthLoginRequest{}
 	mi := &file_auth_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GoogleLoginRequest) String() string {
+func (x *OAuthLoginRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GoogleLoginRequest) ProtoMessage() {}
+func (*OAuthLoginRequest) ProtoMessage() {}
 
-func (x *GoogleLoginRequest) ProtoReflect() protoreflect.Message {
+func (x *OAuthLoginRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_auth_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -926,26 +926,26 @@ func (x *GoogleLoginRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GoogleLoginRequest.ProtoReflect.Descriptor instead.
-func (*GoogleLoginRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use OAuthLoginRequest.ProtoReflect.Descriptor instead.
+func (*OAuthLoginRequest) Descriptor() ([]byte, []int) {
 	return file_auth_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *GoogleLoginRequest) GetGoogleToken() string {
+func (x *OAuthLoginRequest) GetProvider() string {
 	if x != nil {
-		return x.GoogleToken
+		return x.Provider
 	}
 	return ""
 }
 
-func (x *GoogleLoginRequest) GetUserType() string {
+func (x *OAuthLoginRequest) GetIdToken() string {
 	if x != nil {
-		return x.UserType
+		return x.IdToken
 	}
 	return ""
 }
 
-type GoogleLoginResponse struct {
+type OAuthLoginResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
@@ -953,27 +953,25 @@ type GoogleLoginResponse struct {
 	AccessToken   string                 `protobuf:"bytes,4,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
 	RefreshToken  string                 `protobuf:"bytes,5,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	ExpiresAt     int64                  `protobuf:"varint,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	IsNewUser     bool                   `protobuf:"varint,7,opt,name=is_new_user,json=isNewUser,proto3" json:"is_new_user,omitempty"`
-	GoogleEmail   string                 `protobuf:"bytes,8,opt,name=google_email,json=googleEmail,proto3" json:"google_email,omitempty"`
-	ProfileImage  string                 `protobuf:"bytes,9,opt,name=profile_image,json=profileImage,proto3" json:"profile_image,omitempty"`
+	UserType      string                 `protobuf:"bytes,7,opt,name=user_type,json=userType,proto3" json:"user_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GoogleLoginResponse) Reset() {
-	*x = GoogleLoginResponse{}
+func (x *OAuthLoginResponse) Reset() {
+	*x = OAuthLoginResponse{}
 	mi := &file_auth_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GoogleLoginResponse) String() string {
+func (x *OAuthLoginResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GoogleLoginResponse) ProtoMessage() {}
+func (*OAuthLoginResponse) ProtoMessage() {}
 
-func (x *GoogleLoginResponse) ProtoReflect() protoreflect.Message {
+func (x *OAuthLoginResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_auth_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -985,70 +983,56 @@ func (x *GoogleLoginResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GoogleLoginResponse.ProtoReflect.Descriptor instead.
-func (*GoogleLoginResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use OAuthLoginResponse.ProtoReflect.Descriptor instead.
+func (*OAuthLoginResponse) Descriptor() ([]byte, []int) {
 	return file_auth_proto_rawDescGZIP(), []int{13}
 }
 
-func (x *GoogleLoginResponse) GetSuccess() bool {
+func (x *OAuthLoginResponse) GetSuccess() bool {
 	if x != nil {
 		return x.Success
 	}
 	return false
 }
 
-func (x *GoogleLoginResponse) GetMessage() string {
+func (x *OAuthLoginResponse) GetMessage() string {
 	if x != nil {
 		return x.Message
 	}
 	return ""
 }
 
-func (x *GoogleLoginResponse) GetUserId() string {
+func (x *OAuthLoginResponse) GetUserId() string {
 	if x != nil {
 		return x.UserId
 	}
 	return ""
 }
 
-func (x *GoogleLoginResponse) GetAccessToken() string {
+func (x *OAuthLoginResponse) GetAccessToken() string {
 	if x != nil {
 		return x.AccessToken
 	}
 	return ""
 }
 
-func (x *GoogleLoginResponse) GetRefreshToken() string {
+func (x *OAuthLoginResponse) GetRefreshToken() string {
 	if x != nil {
 		return x.RefreshToken
 	}
 	return ""
 }
 
-func (x *GoogleLoginResponse) GetExpiresAt() int64 {
+func (x *OAuthLoginResponse) GetExpiresAt() int64 {
 	if x != nil {
 		return x.ExpiresAt
 	}
 	return 0
 }
 
-func (x *GoogleLoginResponse) GetIsNewUser() bool {
+func (x *OAuthLoginResponse) GetUserType() string {
 	if x != nil {
-		return x.IsNewUser
-	}
-	return false
-}
-
-func (x *GoogleLoginResponse) GetGoogleEmail() string {
-	if x != nil {
-		return x.GoogleEmail
-	}
-	return ""
-}
-
-func (x *GoogleLoginResponse) GetProfileImage() string {
-	if x != nil {
-		return x.ProfileImage
+		return x.UserType
 	}
 	return ""
 }
@@ -1231,21 +1215,19 @@ const file_auth_proto_rawDesc = "" +
 	"\x16ChangePasswordResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12J\n" +
-	"\x13password_changed_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11passwordChangedAt\"T\n" +
-	"\x12GoogleLoginRequest\x12!\n" +
-	"\fgoogle_token\x18\x01 \x01(\tR\vgoogleToken\x12\x1b\n" +
-	"\tuser_type\x18\x02 \x01(\tR\buserType\"\xb1\x02\n" +
-	"\x13GoogleLoginResponse\x12\x18\n" +
+	"\x13password_changed_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11passwordChangedAt\"J\n" +
+	"\x11OAuthLoginRequest\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x19\n" +
+	"\bid_token\x18\x02 \x01(\tR\aidToken\"\xe5\x01\n" +
+	"\x12OAuthLoginResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x17\n" +
 	"\auser_id\x18\x03 \x01(\tR\x06userId\x12!\n" +
 	"\faccess_token\x18\x04 \x01(\tR\vaccessToken\x12#\n" +
 	"\rrefresh_token\x18\x05 \x01(\tR\frefreshToken\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x06 \x01(\x03R\texpiresAt\x12\x1e\n" +
-	"\vis_new_user\x18\a \x01(\bR\tisNewUser\x12!\n" +
-	"\fgoogle_email\x18\b \x01(\tR\vgoogleEmail\x12#\n" +
-	"\rprofile_image\x18\t \x01(\tR\fprofileImage\"\x0f\n" +
+	"expires_at\x18\x06 \x01(\x03R\texpiresAt\x12\x1b\n" +
+	"\tuser_type\x18\a \x01(\tR\buserType\"\x0f\n" +
 	"\rHealthRequest\"\xd7\x01\n" +
 	"\x0eHealthResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x128\n" +
@@ -1253,16 +1235,17 @@ const file_auth_proto_rawDesc = "" +
 	"\x06checks\x18\x03 \x03(\v2 .auth.HealthResponse.ChecksEntryR\x06checks\x1a9\n" +
 	"\vChecksEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\x8a\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\x87\x04\n" +
 	"\vAuthService\x12=\n" +
 	"\fRegistration\x12\x15.auth.RegisterRequest\x1a\x16.auth.RegisterResponse\x120\n" +
 	"\x05Login\x12\x12.auth.LoginRequest\x1a\x13.auth.LoginResponse\x12E\n" +
 	"\fRefreshToken\x12\x19.auth.RefreshTokenRequest\x1a\x1a.auth.RefreshTokenResponse\x12H\n" +
 	"\rValidateToken\x12\x1a.auth.ValidateTokenRequest\x1a\x1b.auth.ValidateTokenResponse\x123\n" +
 	"\x06Logout\x12\x13.auth.LogoutRequest\x1a\x14.auth.LogoutResponse\x12K\n" +
-	"\x0eChangePassword\x12\x1b.auth.ChangePasswordRequest\x1a\x1c.auth.ChangePasswordResponse\x12B\n" +
-	"\vGoogleLogin\x12\x18.auth.GoogleLoginRequest\x1a\x19.auth.GoogleLoginResponse\x123\n" +
-	"\x06Health\x12\x13.auth.HealthRequest\x1a\x14.auth.HealthResponseB\x1cZ\x1aremaster/shared/proto/authb\x06proto3"
+	"\x0eChangePassword\x12\x1b.auth.ChangePasswordRequest\x1a\x1c.auth.ChangePasswordResponse\x12?\n" +
+	"\n" +
+	"OAuthLogin\x12\x17.auth.OAuthLoginRequest\x1a\x18.auth.OAuthLoginResponse\x123\n" +
+	"\x06Health\x12\x13.auth.HealthRequest\x1a\x14.auth.HealthResponseB\aZ\x05/authb\x06proto3"
 
 var (
 	file_auth_proto_rawDescOnce sync.Once
@@ -1290,8 +1273,8 @@ var file_auth_proto_goTypes = []any{
 	(*LogoutResponse)(nil),         // 9: auth.LogoutResponse
 	(*ChangePasswordRequest)(nil),  // 10: auth.ChangePasswordRequest
 	(*ChangePasswordResponse)(nil), // 11: auth.ChangePasswordResponse
-	(*GoogleLoginRequest)(nil),     // 12: auth.GoogleLoginRequest
-	(*GoogleLoginResponse)(nil),    // 13: auth.GoogleLoginResponse
+	(*OAuthLoginRequest)(nil),      // 12: auth.OAuthLoginRequest
+	(*OAuthLoginResponse)(nil),     // 13: auth.OAuthLoginResponse
 	(*HealthRequest)(nil),          // 14: auth.HealthRequest
 	(*HealthResponse)(nil),         // 15: auth.HealthResponse
 	nil,                            // 16: auth.HealthResponse.ChecksEntry
@@ -1310,7 +1293,7 @@ var file_auth_proto_depIdxs = []int32{
 	6,  // 9: auth.AuthService.ValidateToken:input_type -> auth.ValidateTokenRequest
 	8,  // 10: auth.AuthService.Logout:input_type -> auth.LogoutRequest
 	10, // 11: auth.AuthService.ChangePassword:input_type -> auth.ChangePasswordRequest
-	12, // 12: auth.AuthService.GoogleLogin:input_type -> auth.GoogleLoginRequest
+	12, // 12: auth.AuthService.OAuthLogin:input_type -> auth.OAuthLoginRequest
 	14, // 13: auth.AuthService.Health:input_type -> auth.HealthRequest
 	1,  // 14: auth.AuthService.Registration:output_type -> auth.RegisterResponse
 	3,  // 15: auth.AuthService.Login:output_type -> auth.LoginResponse
@@ -1318,7 +1301,7 @@ var file_auth_proto_depIdxs = []int32{
 	7,  // 17: auth.AuthService.ValidateToken:output_type -> auth.ValidateTokenResponse
 	9,  // 18: auth.AuthService.Logout:output_type -> auth.LogoutResponse
 	11, // 19: auth.AuthService.ChangePassword:output_type -> auth.ChangePasswordResponse
-	13, // 20: auth.AuthService.GoogleLogin:output_type -> auth.GoogleLoginResponse
+	13, // 20: auth.AuthService.OAuthLogin:output_type -> auth.OAuthLoginResponse
 	15, // 21: auth.AuthService.Health:output_type -> auth.HealthResponse
 	14, // [14:22] is the sub-list for method output_type
 	6,  // [6:14] is the sub-list for method input_type
