@@ -108,3 +108,43 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	u.SuccessResponse(c, resp.Message, responseData)
 }
+
+func (h *AuthHandler) OAuthLogin(c *gin.Context) {
+	req, ok := u.BindAndValidate[m.OAuthTokenRequest](c, h.logger)
+	if !ok {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), h.timeout)
+	defer cancel()
+
+	provider := req.Provider
+	h.logger.InfoContext(ctx, "Processing OAuth login", "provider", provider)
+
+	resp, err := h.client.OAuthLogin(c, &auth_pb.OAuthLoginRequest{
+		Provider: provider,
+		IdToken:  req.IDToken,
+	})
+
+	if err != nil {
+		h.logger.ErrorContext(ctx, "OAuth login failed", "provider", provider, "error", err)
+		h.errorHandler.HandleGrpcToHttp(c, err)
+		return
+	}
+
+	h.logger.InfoContext(ctx,
+		"OAuth login successful",
+		slog.String("user_id", resp.UserId),
+		slog.String("provider", provider),
+	)
+
+	responseData := &m.AuthResponse{
+		UserID:       resp.UserId,
+		AccessToken:  resp.AccessToken,
+		RefreshToken: resp.RefreshToken,
+		ExpiresAt:    resp.ExpiresAt,
+		UserType:     resp.UserType,
+	}
+
+	u.SuccessResponse(c, resp.Message, responseData)
+}

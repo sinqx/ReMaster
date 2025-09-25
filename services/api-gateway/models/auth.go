@@ -1,6 +1,5 @@
 package models
 
-
 type RegisterDTO struct {
 	Email     string `json:"email"`
 	Password  string `json:"password"`
@@ -21,4 +20,9 @@ type AuthResponse struct {
 type LoginDTO struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+type OAuthTokenRequest struct {
+	Provider string `json:"provider" binding:"required,oneof=google facebook"`
+	IDToken  string `json:"id_token" binding:"required"`
 }
