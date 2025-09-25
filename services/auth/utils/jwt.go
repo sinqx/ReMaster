@@ -3,6 +3,7 @@ package utils
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	config "remaster/shared"
@@ -11,9 +12,10 @@ import (
 )
 
 type CustomClaims struct {
-	UserID   string `json:"user_id"`
-	Email    string `json:"email"`
-	UserType string `json:"user_type"`
+	UserID    string          `json:"user_id"`
+	Email     string          `json:"email"`
+	UserType  string          `json:"user_type"`
+	ExpiresAt jwt.NumericDate `json:"expires_at"`
 	jwt.RegisteredClaims
 }
 
@@ -52,4 +54,33 @@ func (j *JWTUtils) GenerateRefreshToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+func (j *JWTUtils) ParseRefreshToken(token string) (*CustomClaims, error) {
+	tokenClaims, err := jwt.ParseWithClaims(token, &CustomClaims{}, func(t *jwt.Token) (interface{}, error) {
+		return []byte(j.secretKey), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if claims, ok := tokenClaims.Claims.(*CustomClaims); ok && tokenClaims.Valid {
+		return claims, nil
+	}
+	return nil, err
+}
+
+func (j *JWTUtils) ValidateAccessToken(tokenStr string) (*CustomClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &CustomClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(j.secretKey), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	claims, ok := token.Claims.(*CustomClaims)
+	if !ok || !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+
+	return claims, nil
 }

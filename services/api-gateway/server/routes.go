@@ -36,7 +36,12 @@ func (s *Server) setupAuthRoutes() {
 
 	auth.POST("/register", authHandler.Register)
 	auth.POST("/login", authHandler.Login)
-	auth.POST("/oauth", authHandler.OAuthLogin)
+	auth.POST("/provider", authHandler.OAuthLogin)
+	auth.POST("/refresh-token", authHandler.RefreshToken)
+	auth.POST("/validate-token", authHandler.ValidateToken)
+	auth.POST("/change-password", authHandler.ChangePassword)
+	auth.POST("/logout", authHandler.Logout)
+	auth.GET("/health", authHandler.Health)
 
 	s.Logger.Debug("Auth routes registered")
 }

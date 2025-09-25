@@ -36,11 +36,15 @@ type AuthRepositoryInterface interface {
 	// User operations
 	Create(ctx context.Context, user *models.User) error
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
+	GetByID(ctx context.Context, id primitive.ObjectID) (*models.User, error)
 	UpdateLoginInfo(ctx context.Context, userID primitive.ObjectID, ipAddress string) error
 	LockUserAccount(ctx context.Context, userID primitive.ObjectID, duration time.Duration) error
+	UpdatePassword(ctx context.Context, userID primitive.ObjectID, hashedPassword string) error
 
 	// Refresh token operations
 	SaveRefreshToken(ctx context.Context, token *models.RefreshToken) error
+	FindRefreshToken(ctx context.Context, token string) (*models.RefreshToken, error)
+	RevokeRefreshToken(ctx context.Context, token primitive.ObjectID) error
 
 	// Login attempts
 	IncrementLoginAttempts(ctx context.Context, userID primitive.ObjectID) (int, error)
@@ -90,11 +94,45 @@ func (r *authRepositoryImpl) GetByEmail(ctx context.Context, email string) (*mod
 	return &u, nil
 }
 
+func (r *authRepositoryImpl) GetByID(ctx context.Context, id primitive.ObjectID) (*models.User, error) {
+	var u models.User
+	err := r.usersCol.FindOne(ctx, bson.M{"_id": id}).Decode(&u)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, mongo.ErrNoDocuments
+		}
+		return nil, fmt.Errorf("failed to get user by id: %w", err)
+	}
+	return &u, nil
+}
+
 func (r *authRepositoryImpl) SaveRefreshToken(ctx context.Context, token *models.RefreshToken) error {
 	token.ID = primitive.NewObjectID()
 	_, err := r.refreshTokensCol.InsertOne(ctx, token)
 	if err != nil {
 		return fmt.Errorf("failed to save refresh token: %w", err)
+	}
+	return nil
+}
+
+func (r *authRepositoryImpl) FindRefreshToken(ctx context.Context, token string) (*models.RefreshToken, error) {
+	var rt models.RefreshToken
+	err := r.refreshTokensCol.FindOne(ctx, bson.M{"token": token}).Decode(&rt)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, et.NewUnauthorizedError("refresh token not found")
+		}
+		return nil, et.NewDatabaseError("failed to find refresh token", err)
+	}
+	return &rt, nil
+}
+
+func (r *authRepositoryImpl) RevokeRefreshToken(ctx context.Context, tokenID primitive.ObjectID) error {
+	filter := bson.M{"_id": tokenID}
+	update := bson.M{"$set": bson.M{"is_revoked": true}}
+	_, err := r.refreshTokensCol.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return et.NewDatabaseError("failed to revoke refresh token", err)
 	}
 	return nil
 }
@@ -135,6 +173,16 @@ func (r *authRepositoryImpl) LockUserAccount(ctx context.Context, userID primiti
 	update := bson.M{"$set": bson.M{"locked_until": lockedUntil}}
 	_, err := r.usersCol.UpdateByID(ctx, userID, update)
 	return err
+}
+
+func (r *authRepositoryImpl) UpdatePassword(ctx context.Context, userID primitive.ObjectID, hashedPassword string) error {
+	filter := bson.M{"_id": userID}
+	update := bson.M{"$set": bson.M{"password": hashedPassword}}
+	_, err := r.usersCol.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return et.NewDatabaseError("failed to update password", err)
+	}
+	return nil
 }
 
 func (r *authRepositoryImpl) IncrementLoginAttempts(ctx context.Context, userID primitive.ObjectID) (int, error) {

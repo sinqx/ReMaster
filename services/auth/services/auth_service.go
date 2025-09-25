@@ -14,6 +14,7 @@ import (
 	et "remaster/shared/errors"
 
 	"github.com/cenkalti/backoff/v4"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -183,7 +184,7 @@ func (s *AuthService) AuthenticateUser(ctx context.Context, req *models.LoginReq
 	}, nil
 }
 
-func (s *AuthService) OAuthLogin(ctx context.Context, req *models.OAuthLoginRequest) (*models.AuthResponse, error) {
+func (s *AuthService) OAuthLogin(ctx context.Context, req *models.OAuthLoginRequest, metadata *models.RequestMetadata) (*models.AuthResponse, error) {
 	provider, err := s.oauthFactory.GetProvider(oauth.ProviderType(req.Provider))
 	if err != nil {
 		return nil, et.NewInternalError("invalid oauth provider", err)
@@ -213,6 +214,12 @@ func (s *AuthService) OAuthLogin(ctx context.Context, req *models.OAuthLoginRequ
 		if err := s.repo.Create(ctx, user); err != nil {
 			return nil, et.NewDatabaseError("failed to create user", err)
 		}
+	} else {
+		if user.LoginAttempts > 0 {
+			_ = s.repo.ResetLoginAttempts(ctx, user.ID)
+		}
+
+		_ = s.repo.UpdateLoginInfo(ctx, user.ID, metadata.IPAddress)
 	}
 
 	accessToken, err := s.jwtUtils.GenerateAccessToken(user.ID.Hex(), user.Email, string(user.UserType))
@@ -240,4 +247,116 @@ func (s *AuthService) OAuthLogin(ctx context.Context, req *models.OAuthLoginRequ
 		ExpiresAt:    time.Now().Add(s.jwtUtils.AccessTokenTTL).Unix(),
 		TokenType:    "Bearer",
 	}, nil
+}
+
+func (s *AuthService) RefreshToken(ctx context.Context, req *models.RefreshTokenRequest, metadata *models.RequestMetadata) (*models.RefreshTokenResponse, error) {
+	storedToken, err := s.repo.FindRefreshToken(ctx, req.RefreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	if storedToken.IsRevoked {
+		return nil, et.NewUnauthorizedError("refresh token has been revoked")
+	}
+	if time.Now().After(storedToken.ExpiresAt) {
+		return nil, et.NewUnauthorizedError("refresh token has expired")
+	}
+
+	if err := s.repo.RevokeRefreshToken(ctx, storedToken.ID); err != nil {
+		return nil, err
+	}
+
+	user, err := s.repo.GetByID(ctx, storedToken.UserID)
+	if err != nil {
+		return nil, et.NewNotFoundError("user associated with token not found", err)
+	}
+
+	accessToken, err := s.jwtUtils.GenerateAccessToken(user.ID.Hex(), user.Email, string(user.UserType))
+	if err != nil {
+		return nil, et.NewInternalError("failed to generate access token", err)
+	}
+	newRefreshToken, err := s.jwtUtils.GenerateRefreshToken()
+	if err != nil {
+		return nil, et.NewInternalError("failed to generate refresh token", err)
+	}
+
+	newTokenModel := &models.RefreshToken{
+		UserID:    user.ID,
+		Token:     newRefreshToken,
+		ExpiresAt: time.Now().Add(s.jwtUtils.RefreshTokenTTL),
+		CreatedAt: time.Now(),
+		DeviceID:  metadata.DeviceID,
+		UserAgent: metadata.UserAgent,
+		IP:        metadata.IPAddress,
+	}
+	if err := s.repo.SaveRefreshToken(ctx, newTokenModel); err != nil {
+		return nil, et.NewDatabaseError("failed to save new refresh token", err)
+	}
+
+	return &models.RefreshTokenResponse{
+		AccessToken:  accessToken,
+		RefreshToken: newRefreshToken,
+		ExpiresAt:    time.Now().Add(s.jwtUtils.AccessTokenTTL).Unix(),
+	}, nil
+}
+
+func (s *AuthService) ValidateToken(ctx context.Context, req *models.ValidateTokenRequest) (*models.ValidateTokenResponse, error) {
+	claims, err := s.jwtUtils.ValidateAccessToken(req.AccessToken)
+	if err != nil {
+		return nil, et.NewUnauthorizedError("invalid or expired token")
+	}
+
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return nil, et.NewInternalError("failed to parse user id", err)
+	}
+
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, et.NewDatabaseError("failed to fetch user", err)
+	}
+
+	return &models.ValidateTokenResponse{
+		Valid:      true,
+		UserID:     user.ID.Hex(),
+		UserType:   user.UserType,
+		IsActive:   user.IsActive,
+		IsVerified: user.IsVerified,
+		ExpiresAt:  claims.ExpiresAt.Time.Unix(),
+	}, nil
+}
+
+func (s *AuthService) ChangePassword(ctx context.Context, req *models.ChangePasswordRequest) error {
+	userID, err := primitive.ObjectIDFromHex(req.UserId)
+	if err != nil {
+		return et.NewValidationError("invalid user id", map[string]string{"user_id": req.UserId})
+	}
+
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return et.NewDatabaseError("failed to fetch user", err)
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.OldPassword)); err != nil {
+		return et.NewUnauthorizedError("old password is incorrect")
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), BcryptCost)
+	if err != nil {
+		return et.NewInternalError("failed to hash new password", err)
+	}
+
+	err = s.repo.UpdatePassword(ctx, user.ID, string(hashedPassword))
+	if err != nil {
+		return et.NewDatabaseError("failed to update password", err)
+	}
+	return nil
+}
+
+func (s *AuthService) Logout(ctx context.Context, req *models.LogoutRequest) error {
+	tokenID, err := primitive.ObjectIDFromHex(req.RefreshToken)
+	if err != nil {
+		return et.NewValidationError("invalid refresh token id", map[string]string{"refresh_token": req.RefreshToken})
+	}
+	return s.repo.RevokeRefreshToken(ctx, tokenID)
 }
