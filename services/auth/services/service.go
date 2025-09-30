@@ -29,7 +29,6 @@ type AuthService struct {
 	repo         repo.AuthRepositoryInterface
 	redisMgr     *conn.RedisManager
 	oauthFactory *oauth.ProviderFactory
-	// oauthConfig *config.OAuthConfig
 	jwtUtils *utils.JWTUtils
 }
 
