@@ -46,28 +46,24 @@ func NewBaseServer(name string, cfg *cfg.Config, logger *slog.Logger, opts ...Se
 // Dependencies injection options
 // ============================================================================
 
-func WithMongo(ctx context.Context) ServerOption {
+func WithMongoManager(mgr *connection.MongoManager) ServerOption {
 	return func(s *BaseServer) error {
-		s.Logger.Info("Initializing MongoDB connection...")
-
-		if err := s.MongoMgr.Connect(ctx); err != nil {
-			s.Logger.Error("Failed to connect to MongoDB", "error", err)
-			return err
+		if mgr == nil {
+			s.Logger.Error("Failed to connect to MongoDB")
 		}
+		s.MongoMgr = mgr
 
 		s.Logger.Info("MongoDB connected successfully")
 		return nil
 	}
 }
 
-func WithRedis(ctx context.Context) ServerOption {
+func WithRedisManager(mgr *connection.RedisManager) ServerOption {
 	return func(s *BaseServer) error {
-		s.Logger.Info("Initializing Redis connection...")
-
-		if err := s.RedisMgr.Connect(ctx); err != nil {
-			s.Logger.Error("Failed to connect to Redis", "error", err)
-			return err
+		if mgr == nil {
+			s.Logger.Error("Failed to connect to Redis")
 		}
+		s.RedisMgr = mgr
 
 		s.Logger.Info("Redis connected successfully")
 		return nil
