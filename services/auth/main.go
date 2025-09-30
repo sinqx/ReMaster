@@ -9,6 +9,7 @@ import (
 	config "remaster/shared"
 	"remaster/shared/connection"
 	logger "remaster/shared/logger"
+	srv "remaster/shared/server"
 )
 
 func main() {
@@ -22,23 +23,23 @@ func main() {
 
 	// dependencies initialization
 	mongoMgr := connection.NewMongoManager(&cfg.Mongo)
-	if err := mongoMgr.Connect(context.Background()); err != nil {
-		logger.Error("mongo connect error", "error", err)
-		os.Exit(1)
-	}
-
 	redisMgr := connection.NewRedisManager(&cfg.Redis)
-	if err := redisMgr.Connect(context.Background()); err != nil {
-		logger.Error("redis connect error", "error", err)
+
+	base, _ := srv.NewBaseServer("auth", cfg, logger,
+		srv.WithMongoManager(mongoMgr),
+		srv.WithRedisManager(redisMgr),
+	)
+
+	// server
+	authServer, err := server.NewServer(base)
+	if err != nil {
+		logger.Error("Failed to create auth server", "error", err)
 		os.Exit(1)
 	}
 
-	// server initialization
-	srv := server.NewServer(cfg, logger, mongoMgr, redisMgr)
-	if err := srv.Start(); err != nil {
-		logger.Error("server stopped with error", "error", err)
+	// Start
+	if err := authServer.Start(context.Background()); err != nil {
+		logger.Error("Auth service stopped with error", "error", err)
 		os.Exit(1)
 	}
-
-	logger.Info("Auth Service stopped gracefully")
 }
