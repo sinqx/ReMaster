@@ -78,7 +78,6 @@ func WithRedis(ctx context.Context) ServerOption {
 // shutdown utils
 // ============================================================================
 
-// Cleanup закрывает все активные соединения
 func (s *BaseServer) Cleanup(ctx context.Context) {
 	s.Logger.Info("Cleaning up resources...")
 

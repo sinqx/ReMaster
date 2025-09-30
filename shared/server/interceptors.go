@@ -78,7 +78,6 @@ func LoggingUnary(baseLogger *slog.Logger) grpc.UnaryServerInterceptor {
 		start := time.Now()
 		reqLogger := logpkg.FromContext(ctx, baseLogger)
 
-		// perform
 		resp, err = handler(ctx, req)
 		duration := time.Since(start)
 
