@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
+// DELETE FILE
 func (s *Server) startGRPCServer(ctx context.Context, grpcAddr string) error {
 	s.Logger.Info("gRPC server starting with settings",
 		"MaxRecvMsgSize", s.Config.GRPC.MaxReceiveSize,
