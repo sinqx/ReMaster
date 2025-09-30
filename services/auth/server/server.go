@@ -5,42 +5,32 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
 
 	"remaster/services/auth/handlers"
 	oauth "remaster/services/auth/oauth"
 	"remaster/services/auth/repositories"
 	"remaster/services/auth/services"
 	"remaster/services/auth/utils"
-	cfg "remaster/shared"
-	"remaster/shared/connection"
+	auth_pb "remaster/shared/proto/auth"
+	"remaster/shared/server"
 )
 
 type Server struct {
-	Name         string
-	Config       *cfg.Config
-	Logger       *slog.Logger
-	MongoManager *connection.MongoManager
-	RedisManager *connection.RedisManager
-
+	Base        *server.BaseServer
 	authHandler *handlers.AuthHandler
-	grpcServer  *grpc.Server
+	grpcMgr     *server.GRPCServerManager
 }
 
-func NewServer(config *cfg.Config, logger *slog.Logger, mongoMgr *connection.MongoManager, redisMgr *connection.RedisManager) *Server {
-	serviceName := "auth"
+func NewServer(base *server.BaseServer) (*Server, error) {
+	serviceLogger := base.Logger.With(slog.String("service", base.Name))
+	jwtUtils := utils.NewJWTUtils(&base.Config.JWT)
+	oauthFactory := oauth.NewProviderFactory(&base.Config.OAuth)
 
-	serviceLogger := logger.With(slog.String("service", serviceName))
-	jwtUtils := utils.NewJWTUtils(&config.JWT)
-	oauthFactory := oauth.NewProviderFactory(&config.OAuth)
-
-	authRepo := repositories.NewAuthRepository(mongoMgr.GetDatabase(), serviceLogger)
-	authService := services.NewAuthService(authRepo, redisMgr, oauthFactory, jwtUtils)
+	authRepo := repositories.NewAuthRepository(base.MongoMgr.GetDatabase(), serviceLogger)
+	authService := services.NewAuthService(authRepo, base.RedisMgr, oauthFactory, jwtUtils)
 	authHandler := handlers.NewAuthHandler(authService, serviceLogger)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -53,82 +43,53 @@ func NewServer(config *cfg.Config, logger *slog.Logger, mongoMgr *connection.Mon
 	serviceLogger.Info("Database indexes created successfully")
 
 	return &Server{
-		Name:         serviceName,
-		Config:       config,
-		Logger:       serviceLogger,
-		MongoManager: mongoMgr,
-		RedisManager: redisMgr,
-		authHandler:  authHandler,
-	}
+		Base:        base,
+		authHandler: authHandler,
+	}, nil
 }
 
-func (s *Server) Start() error {
-	grpcAddr, err := s.Config.GetServiceGRPCAddr(s.Name)
+func (s *Server) Start(ctx context.Context) error {
+	grpcAddr, err := s.Base.Config.GetServiceGRPCAddr(s.Base.Name)
 	if err != nil {
-		s.Logger.Error("Failed to get gRPC service address", "error", err)
-		return fmt.Errorf("failed to get gRPC address: %w", err)
+		return fmt.Errorf("failed to get gRPC service address: %w", err)
 	}
 
-	s.Logger.Info("Creating server for", "service", s.Name, "grpc_address", grpcAddr)
+	s.Base.Logger.Info("Creating gRPC server", "address", grpcAddr)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	g, gCtx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		return s.startGRPCServer(gCtx, grpcAddr)
-	})
-
-	g.Go(func() error {
-		return s.handleShutdown(ctx, cancel)
-	})
-
-	if err := g.Wait(); err != nil {
-		s.Logger.Error("Server stopped with error", "error", err)
+	grpcCfg := server.GRPCServerConfig{
+		Address:           grpcAddr,
+		Logger:            s.Base.Logger,
+		Config:            &s.Base.Config.GRPC,
+		EnableHealthCheck: true,
+		EnableReflection:  s.Base.Config.GRPC.EnableReflection,
+		InterceptorConfig: server.InterceptorConfig{
+			EnableLogging:  true,
+			EnableRecovery: true,
+		},
+	}
+	grpcMgr, err := server.NewGRPCServer(grpcCfg)
+	if err != nil {
 		return err
 	}
-	return nil
-}
+	s.grpcMgr = grpcMgr
 
-func (s *Server) handleShutdown(ctx context.Context, cancel context.CancelFunc) error {
-	// Setup signal handling
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	// register Auth
+	auth_pb.RegisterAuthServiceServer(grpcMgr.GetGRPCServer(), s.authHandler)
+	s.Base.Logger.Info("Auth service registered")
 
-	select {
-	case sig := <-sigChan:
-		s.Logger.Info("Received shutdown signal", "signal", sig.String())
-		cancel()
-	case <-ctx.Done():
-		s.Logger.Info("Context cancelled")
-	}
+	// graceful shutdown
+	g, gCtx := errgroup.WithContext(ctx)
+	gCtx, cancel := context.WithCancel(gCtx)
 
-	s.Logger.Info("Cleaning up resources...")
-	if s.grpcServer != nil {
-		stopped := make(chan struct{})
-		go func() {
-			s.grpcServer.GracefulStop()
-			close(stopped)
-		}()
-	}
+	g.Go(func() error {
+		return grpcMgr.Start(gCtx)
+	})
 
-	if s.MongoManager != nil {
-		if err := s.MongoManager.Disconnect(ctx); err != nil {
-			s.Logger.Error("Error closing MongoDB", "error", err)
-		} else {
-			s.Logger.Info("MongoDB connection closed")
-		}
-	}
+	g.Go(func() error {
+		s.Base.WaitForShutdownSignal(func() { cancel() })
+		s.Base.Cleanup(context.Background())
+		return nil
+	})
 
-	if s.RedisManager != nil {
-		if err := s.RedisManager.Disconnect(); err != nil {
-			s.Logger.Error("Error closing Redis", "error", err)
-		} else {
-			s.Logger.Info("Redis connection closed")
-		}
-	}
-
-	s.Logger.Info("Graceful shutdown completed")
-	return nil
+	return g.Wait()
 }
