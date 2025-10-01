@@ -22,11 +22,11 @@ type AuthHandler struct {
 	logger       *slog.Logger
 }
 
-func NewAuthHandler(authService *services.AuthService, logger *slog.Logger) *AuthHandler {
+func NewAuthHandler(authService *services.AuthService, errorHandler *errors.ErrorHandler, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
 		authService:  authService,
 		logger:       logger.With(slog.String("auth", "handler")),
-		errorHandler: errors.NewErrorHandler(logger),
+		errorHandler: errorHandler,
 	}
 }
 
@@ -198,7 +198,7 @@ func (h *AuthHandler) ChangePassword(ctx context.Context, req *pb.ChangePassword
 	h.logger.Info("Change password request")
 
 	changeReq := &models.ChangePasswordRequest{
-		UserId:      req.UserId,
+		UserID:      req.UserId,
 		OldPassword: req.OldPassword,
 		NewPassword: req.NewPassword,
 	}

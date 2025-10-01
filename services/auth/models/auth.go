@@ -133,7 +133,7 @@ type OAuthLoginRequest struct {
 }
 
 type ChangePasswordRequest struct {
-	UserId      string `json:"user_id" validate:"required"`
+	UserID      string `json:"user_id" validate:"required"`
 	OldPassword string `json:"old_password" validate:"required"`
 	NewPassword string `json:"new_password" validate:"required,min=8"`
 }
@@ -147,6 +147,7 @@ type AuthResponse struct {
 }
 
 type LogoutRequest struct {
+	UserID       string `json:"user_id" validate:"required"`
 	AccessToken  string `json:"access_token" validate:"required"`
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }
