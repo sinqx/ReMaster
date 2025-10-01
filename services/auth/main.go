@@ -2,44 +2,66 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 
-	"remaster/services/auth/server"
+	"remaster/services/auth/handlers"
+	"remaster/services/auth/oauth"
+	"remaster/services/auth/repositories"
+	"remaster/services/auth/services"
+	"remaster/services/auth/utils"
 	config "remaster/shared"
-	"remaster/shared/connection"
-	logger "remaster/shared/logger"
-	srv "remaster/shared/server"
+	auth_pb "remaster/shared/proto/auth"
+	"remaster/shared/server"
 )
 
 func main() {
-	cfg, err := config.LoadConfig()
+	// Load config
+	cfg, err := config.LoadConfig("config.yaml")
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		panic("failed to load config: " + err.Error())
 	}
 
-	logger := logger.Get(cfg.Log)
-	logger.Info("Starting Auth micro-service")
+	// Logger
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	// dependencies initialization
-	mongoMgr := connection.NewMongoManager(&cfg.Mongo)
-	redisMgr := connection.NewRedisManager(&cfg.Redis)
-
-	base, _ := srv.NewBaseServer("auth", cfg, logger,
-		srv.WithMongoManager(mongoMgr),
-		srv.WithRedisManager(redisMgr),
-	)
-
-	// server
-	authServer, err := server.NewServer(base)
+	// Build server
+	srv, err := server.NewServer(server.ServerConfig{
+		Name:              "auth",
+		Config:            cfg,
+		Logger:            logger,
+		EnableHealthCheck: true,
+		EnableReflection:  true,
+		InterceptorConfig: server.InterceptorConfig{
+			EnableLogging:  true,
+			EnableRecovery: true,
+		},
+		Dependencies: []server.ServerOption{
+			server.WithMongo(context.Background()),
+			// server.WithRedis(context.Background()),
+		},
+	})
 	if err != nil {
-		logger.Error("Failed to create auth server", "error", err)
+		logger.Error("failed to initialize server", "error", err)
 		os.Exit(1)
 	}
+
+	// Dependencies
+	jwtUtils := utils.NewJWTUtils(&cfg.JWT)
+	oauthFactory := oauth.NewProviderFactory(&cfg.OAuth)
+	mongoMgr := srv.MongoMgr.GetDatabase()
+
+	// Business logic
+	authRepo := repositories.NewAuthRepository(mongoMgr, logger)
+	authService := services.NewAuthService(authRepo, oauthFactory, jwtUtils, logger)
+	authHandler := handlers.NewAuthHandler(authService, srv.ErrorHandler, srv.Logger)
+
+	// Register gRPC service
+	auth_pb.RegisterAuthServiceServer(srv.GetGRPCServer(), authHandler)
+	logger.Info("auth service registered on gRPC server")
 
 	// Start
-	if err := authServer.Start(context.Background()); err != nil {
-		logger.Error("Auth service stopped with error", "error", err)
-		os.Exit(1)
+	if err := srv.Start(context.Background()); err != nil {
+		logger.Error("server exited with error", "error", err)
 	}
 }
