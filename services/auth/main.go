@@ -38,7 +38,7 @@ func main() {
 		},
 		Dependencies: []server.ServerOption{
 			server.WithMongo(context.Background()),
-			// server.WithRedis(context.Background()),
+			server.WithRedis(context.Background()),
 		},
 	})
 	if err != nil {
@@ -50,10 +50,11 @@ func main() {
 	jwtUtils := utils.NewJWTUtils(&cfg.JWT)
 	oauthFactory := oauth.NewProviderFactory(&cfg.OAuth)
 	mongoMgr := srv.MongoMgr.GetDatabase()
+	redisClient := srv.RedisMgr.GetClient()
 
 	// Business logic
 	authRepo := repositories.NewAuthRepository(mongoMgr, logger)
-	authService := services.NewAuthService(authRepo, oauthFactory, jwtUtils, logger)
+	authService := services.NewAuthService(authRepo, oauthFactory, redisClient, jwtUtils, logger)
 	authHandler := handlers.NewAuthHandler(authService, srv.ErrorHandler, srv.Logger)
 
 	// Register gRPC service
