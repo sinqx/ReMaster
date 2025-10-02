@@ -96,6 +96,10 @@ func NewPermissionError(msg string) *AppError {
 	return NewAppError(ErrorTypeForbidden, "PERMISSION_ERROR", msg, http.StatusForbidden, nil, nil)
 }
 
+func NewTooManyRequestsError(msg string) *AppError {
+	return NewAppError(ErrorTypeRateLimit, "TOO_MANY_REQUESTS", msg, http.StatusTooManyRequests, nil, nil)
+}
+
 // -------- Mapping --------
 
 func (et ErrorType) String() string {
