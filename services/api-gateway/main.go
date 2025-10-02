@@ -2,20 +2,19 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 
 	"remaster/services/api-gateway/server"
 	config "remaster/shared"
 	"remaster/shared/connection"
 	"remaster/shared/errors"
-	logger "remaster/shared/logger"
+	"remaster/shared/logger"
 )
 
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		panic("failed to load config: " + err.Error())
 	}
 
 	logger := logger.Get(cfg.Log)

@@ -97,8 +97,6 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 		return nil, fmt.Errorf("service: %w", err)
 	}
 
-	s.logger.Info("User created successfully", "user_id", user.ID.Hex())
-
 	accessToken, err := s.jwtUtils.GenerateAccessToken(user.ID.Hex(), user.Email, string(user.UserType))
 	if err != nil {
 		s.logger.Error("Failed to generate access token", "error", err)
@@ -126,7 +124,6 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 		return nil, fmt.Errorf("failed to save refresh token: %w", err)
 	}
 
-	s.logger.Info("Refresh token saved", "user_id", user.ID.Hex())
 
 	return &models.AuthResponse{
 		User:         user.ToResponse(),

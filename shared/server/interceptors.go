@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	logpkg "remaster/shared/logger"
+	"remaster/shared/logger"
 )
 
 // RecoveryUnary — catches panics, logs the stack, and returns an internal status (without panic details).
@@ -67,7 +67,7 @@ func CorrelationUnary(baseLogger *slog.Logger) grpc.UnaryServerInterceptor {
 
 		// create request logger and inject into context
 		reqLogger := baseLogger.With(slog.String("correlation_id", cid))
-		ctx = logpkg.ToContext(ctx, reqLogger)
+		ctx = logger.ToContext(ctx, reqLogger)
 		return handler(ctx, req)
 	}
 }
@@ -76,7 +76,7 @@ func CorrelationUnary(baseLogger *slog.Logger) grpc.UnaryServerInterceptor {
 func LoggingUnary(baseLogger *slog.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		start := time.Now()
-		reqLogger := logpkg.FromContext(ctx, baseLogger)
+		reqLogger := logger.FromContext(ctx, baseLogger)
 
 		resp, err = handler(ctx, req)
 		duration := time.Since(start)

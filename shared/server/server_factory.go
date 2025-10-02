@@ -22,7 +22,7 @@ type Server struct {
 	Config *cfg.Config
 	Logger *slog.Logger
 
-	// Core components 
+	// Core components
 	ErrorHandler *errors.ErrorHandler
 	GRPCManager  *GRPCServerManager
 
@@ -55,7 +55,7 @@ type ServerOption func(*Server) error
 
 func NewServer(config ServerConfig) (*Server, error) {
 	logger := config.Logger.With(slog.String("service", config.Name))
-	logger.Info("Initializing unified server")
+	logger.Info("Creating server for", "service", config.Name)
 
 	server := &Server{
 		Name:         config.Name,
@@ -137,13 +137,12 @@ func WithRedis(ctx context.Context) ServerOption {
 // Server Lifecycle
 // ============================================================================
 
-// GetGRPCServer - возвращает gRPC сервер для регистрации сервисов
 func (s *Server) GetGRPCServer() *grpc.Server {
 	return s.GRPCManager.GetGRPCServer()
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	s.Logger.Info("Starting unified server")
+	s.Logger.Info("Starting server for", "service", s.Name)
 
 	ctx, cancel := context.WithCancel(ctx)
 	s.cancelFunc = cancel

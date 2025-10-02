@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"os"
 
 	"remaster/services/auth/handlers"
@@ -11,6 +10,7 @@ import (
 	"remaster/services/auth/services"
 	"remaster/services/auth/utils"
 	config "remaster/shared"
+	"remaster/shared/logger"
 	auth_pb "remaster/shared/proto/auth"
 	"remaster/shared/server"
 )
@@ -23,7 +23,7 @@ func main() {
 	}
 
 	// Logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := logger.Get(cfg.Log)
 
 	// Build server
 	srv, err := server.NewServer(server.ServerConfig{
