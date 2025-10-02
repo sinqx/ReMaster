@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"remaster/services/auth/cache"
 	"remaster/services/auth/models"
 	oauth "remaster/services/auth/oauth"
 	repo "remaster/services/auth/repositories"
@@ -14,15 +15,14 @@ import (
 	et "remaster/shared/errors"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	MaxLoginAttempts = 5
-	LockoutDuration  = 15 * time.Minute
-	BcryptCost       = 12
+	BcryptCost = 12
 )
 
 type AuthService struct {
@@ -30,11 +30,16 @@ type AuthService struct {
 	oauthFactory *oauth.ProviderFactory
 	jwtUtils     *utils.JWTUtils
 	logger       *slog.Logger
+
+	rl *cache.RateLimiter
+	tb *cache.TokenBlacklist
+	ts *cache.RefreshTokenStore
 }
 
 func NewAuthService(
 	userRepo repo.AuthRepositoryInterface,
 	oauthFactory *oauth.ProviderFactory,
+	redisClient *redis.Client,
 	jwtUtils *utils.JWTUtils,
 	logger *slog.Logger,
 ) *AuthService {
@@ -43,6 +48,9 @@ func NewAuthService(
 		oauthFactory: oauthFactory,
 		jwtUtils:     jwtUtils,
 		logger:       logger.With(slog.String("auth", "service")),
+		rl:           cache.NewRateLimiter(redisClient),
+		tb:           cache.NewTokenBlacklist(redisClient),
+		ts:           cache.NewRefreshTokenStore(redisClient),
 	}
 }
 
@@ -124,7 +132,6 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 		return nil, fmt.Errorf("failed to save refresh token: %w", err)
 	}
 
-
 	return &models.AuthResponse{
 		User:         user.ToResponse(),
 		AccessToken:  accessToken,
@@ -137,38 +144,39 @@ func (s *AuthService) CreateUser(ctx context.Context, req *models.RegisterReques
 func (s *AuthService) AuthenticateUser(ctx context.Context, req *models.LoginRequest, metadata *models.RequestMetadata) (*models.AuthResponse, error) {
 	s.logger.Info("Authenticating user", "email", req.Email)
 
+	// Redis check attempts
+	ok, attempts, err := s.rl.CheckLoginAttempts(ctx, req.Email)
+	if err != nil {
+		s.logger.Warn("Login rate limit exceeded", "email", req.Email, "attempts", attempts)
+		return nil, et.NewTooManyRequestsError(err.Error())
+	}
+	if !ok {
+		s.logger.Warn("Too many login attempts", "email", req.Email, "attempts", attempts)
+		return nil, et.NewTooManyRequestsError("too many login attempts")
+	}
+
 	user, err := s.repo.GetByEmail(ctx, req.Email)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			s.logger.Warn("Authentication failed: user not found", "email", req.Email)
+			_ = s.rl.IncrementLoginAttempts(ctx, req.Email)
 			return nil, et.NewUnauthorizedError("invalid email or password")
 		}
 		s.logger.Error("Failed to fetch user for authentication", "error", err)
 		return nil, et.NewDatabaseError("failed to fetch user", err)
 	}
 
-	if user.LockedUntil != nil && time.Now().Before(*user.LockedUntil) {
-		s.logger.Warn("Account locked", "user_id", user.ID.Hex())
-		return nil, et.NewPermissionError("account is locked, please try again later")
-	}
-
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		attempts, _ := s.repo.IncrementLoginAttempts(ctx, user.ID)
-		s.logger.Warn("Invalid password", "user_id", user.ID.Hex(), "attempts", attempts)
-		if attempts >= MaxLoginAttempts {
-			s.logger.Warn("Max attempts reached, locking account", "user_id", user.ID.Hex())
-			_ = s.repo.LockUserAccount(ctx, user.ID, LockoutDuration)
+		if err := s.rl.IncrementLoginAttempts(ctx, req.Email); err != nil {
+			s.logger.Error("Failed to increment login attempts in Redis", "error", err)
 		}
+		s.logger.Warn("Invalid password", "email", req.Email, "attempts", attempts+1)
 		return nil, et.NewUnauthorizedError("invalid email or password")
 	}
 
-	if user.LoginAttempts > 0 {
-		s.logger.Info("Resetting login attempts", "user_id", user.ID.Hex())
-		_ = s.repo.ResetLoginAttempts(ctx, user.ID)
+	if err := s.rl.ResetLoginAttempts(ctx, req.Email); err != nil {
+		s.logger.Error("Failed to reset login attempts in Redis", "error", err)
 	}
-
-	s.logger.Info("Updating login info", "user_id", user.ID.Hex())
-	_ = s.repo.UpdateLoginInfo(ctx, user.ID, metadata.IPAddress)
 
 	accessToken, err := s.jwtUtils.GenerateAccessToken(user.ID.Hex(), user.Email, string(user.UserType))
 	if err != nil {
@@ -180,6 +188,15 @@ func (s *AuthService) AuthenticateUser(ctx context.Context, req *models.LoginReq
 		s.logger.Error("Failed to generate refresh token", "error", err)
 		return nil, err
 	}
+
+	expiresAt := time.Now().Add(s.jwtUtils.RefreshTokenTTL)
+	if err := s.ts.SaveRefreshToken(ctx, user.ID, refreshToken, expiresAt); err != nil {
+		s.logger.Error("Failed to save refresh token", "error", err)
+		return nil, err
+	}
+
+	s.logger.Info("Updating login info", "user_id", user.ID.Hex())
+	_ = s.repo.UpdateLoginInfo(ctx, user.ID, metadata.IPAddress)
 
 	tokenModel := &models.RefreshToken{
 		UserID:    user.ID,
